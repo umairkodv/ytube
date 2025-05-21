@@ -13,8 +13,14 @@ RUN apt-get update && apt-get install -y \
 # Verify python3 and pip3 installation
 RUN python3 --version && pip3 --version
 
-# Install yt-dlp via pip
+# Upgrade pip to the latest version
+RUN pip3 install --upgrade pip
+
+# Install yt-dlp via pip3
 RUN pip3 install yt-dlp
+
+# Verify yt-dlp installation
+RUN yt-dlp --version
 
 # Enable mod_rewrite for Apache (if needed)
 RUN a2enmod rewrite
