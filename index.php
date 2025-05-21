@@ -7,23 +7,12 @@ error_reporting(E_ALL);
 // Start session for tracking downloads
 session_start();
 
-// Find the full path to ffmpeg and yt-dlp
-$ffmpeg_path = trim(shell_exec('which ffmpeg'));
-if (empty($ffmpeg_path)) {
-    $ffmpeg_path = 'ffmpeg'; // Fallback to just the command name
-}
-
-$ytdlp_path = trim(shell_exec('which yt-dlp'));
-if (empty($ytdlp_path)) {
-    $ytdlp_path = 'yt-dlp'; // Fallback to just the command name
-}
-
 // Configuration
 $config = [
     'temp_dir' => 'temp/',
     'log_dir' => 'logs/',
-    'ytdlp_path' => $ytdlp_path,
-    'ffmpeg_path' => $ffmpeg_path,
+    'ytdlp_path' => 'yt-dlp',
+    'ffmpeg_path' => 'ffmpeg',
     'max_execution_time' => 600, // 10 minutes
     'download_timeout' => 300, // 5 minutes
     'rate_limit' => [
@@ -77,34 +66,20 @@ $config = [
     ]
 ];
 
-// Get a random user agent
-function get_random_user_agent($config) {
-    return $config['user_agents'][array_rand($config['user_agents'])];
-}
-
-// Platform-specific options
-$youtube_options = '--sleep-interval 3 --max-sleep-interval 6 --extractor-args "youtube:player_client=android" --geo-bypass --ignore-errors --no-warnings --no-check-certificate --prefer-insecure';
-$tiktok_options = '--no-check-certificate --no-warnings --ignore-errors';
-
 // Set max execution time
 ini_set('max_execution_time', $config['max_execution_time']);
 
 // Create necessary directories with proper permissions
 foreach ([$config['temp_dir'], $config['log_dir']] as $dir) {
     if (!file_exists($dir)) {
-        mkdir($dir, 0777, true);
-    } else {
-        // Ensure directory is writable
-        chmod($dir, 0777);
+        mkdir($dir, 0755, true);
     }
 }
 
 // Create cache directory with proper permissions
 $cache_dir = '/tmp/yt-dlp-cache/';
 if (!file_exists($cache_dir)) {
-    mkdir($cache_dir, 0777, true);
-} else {
-    chmod($cache_dir, 0777);
+    mkdir($cache_dir, 0755, true);
 }
 putenv("XDG_CACHE_HOME={$cache_dir}");
 
@@ -231,10 +206,13 @@ function check_rate_limit($config) {
     return true;
 }
 
+// Get a random user agent
+function get_random_user_agent($config) {
+    return $config['user_agents'][array_rand($config['user_agents'])];
+}
+
 // Function to get video info with enhanced error handling
 function get_video_info($url, $config) {
-    global $youtube_options, $tiktok_options;
-    
     debug_log("Getting video info for URL: $url", $config);
     $ytdlp_path = $config['ytdlp_path'];
     $escaped_url = escapeshellarg($url);
@@ -249,107 +227,31 @@ function get_video_info($url, $config) {
     $is_youtube_shorts = (strpos($url, 'youtube.com/shorts') !== false);
     $is_tiktok = (strpos($url, 'tiktok.com') !== false);
     
-    // Build the command with platform-specific options
-    if ($is_youtube) {
-        // Special handling for YouTube
-        if ($is_youtube_shorts) {
-            // Even more specific handling for shorts
-            $cmd = "$ytdlp_path -J --user-agent $user_agent_arg $youtube_options --add-header 'Accept-Language: en-US,en;q=0.9' --cookies-from-browser chrome $escaped_url > \"$output_file\" 2>&1";
-        } else {
-            $cmd = "$ytdlp_path -J --user-agent $user_agent_arg $youtube_options $escaped_url > \"$output_file\" 2>&1";
-        }
-    } else if ($is_tiktok) {
-        // TikTok specific options
-        $cmd = "$ytdlp_path -J --user-agent $user_agent_arg $tiktok_options $escaped_url > \"$output_file\" 2>&1";
-    } else {
-        // Default for other platforms
-        $cmd = "$ytdlp_path -J --user-agent $user_agent_arg --no-check-certificate --no-cache-dir $escaped_url > \"$output_file\" 2>&1";
-    }
+    // Basic command - simplified for troubleshooting
+    $cmd = "$ytdlp_path -J --no-check-certificate --no-warnings $escaped_url > \"$output_file\" 2>&1";
     
+    // Log the command
     debug_log("Executing info command: $cmd", $config);
     
-    // Execute the command with timeout
-    $descriptorspec = [
-        0 => ["pipe", "r"],  // stdin
-        1 => ["pipe", "w"],  // stdout
-        2 => ["pipe", "w"]   // stderr
-    ];
+    // Execute the command
+    exec($cmd, $output, $return_var);
     
-    $process = proc_open($cmd, $descriptorspec, $pipes);
-    
-    if (is_resource($process)) {
-        // Set pipes to non-blocking mode
-        stream_set_blocking($pipes[1], 0);
-        stream_set_blocking($pipes[2], 0);
-        
-        $output = '';
-        $error = '';
-        $start_time = time();
-        
-        // Check process status with timeout
-        while (true) {
-            $status = proc_get_status($process);
-            
-            // Read from stdout and stderr
-            $output .= stream_get_contents($pipes[1]);
-            $error .= stream_get_contents($pipes[2]);
-            
-            // Check if process has ended
-            if (!$status['running']) {
-                break;
-            }
-            
-            // Check for timeout
-            if (time() - $start_time > 60) { // 1 minute timeout for info
-                debug_log("Info process timed out after 60 seconds", $config, 'ERROR');
-                proc_terminate($process);
-                break;
-            }
-            
-            // Sleep briefly to prevent CPU hogging
-            usleep(100000); // 0.1 seconds
-        }
-        
-        // Close pipes
-        fclose($pipes[0]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
-        
-        // Close process
-        $return_var = proc_close($process);
-        
-        debug_log("Info command output: $output", $config);
-        debug_log("Info command error: $error", $config);
-    } else {
-        debug_log("Failed to start info process", $config, 'ERROR');
-        return [
-            'success' => false,
-            'message' => 'Failed to start info process'
-        ];
-    }
+    // Log the result
+    debug_log("Info command returned: $return_var", $config);
     
     // Check if the output file exists and has content
     if (!file_exists($output_file) || filesize($output_file) < 10) {
-        debug_log("Info file not created or empty. Error: $error", $config, 'ERROR');
+        debug_log("Info file not created or empty. Return code: $return_var", $config, 'ERROR');
         
-        // Try an alternative approach for YouTube
-        if ($is_youtube) {
-            debug_log("Trying alternative approach for YouTube", $config);
-            
-            // Use a different format for the command
-            $alt_cmd = "$ytdlp_path --dump-json --skip-download --user-agent $user_agent_arg $youtube_options --add-header 'Accept-Language: en-US,en;q=0.9' $escaped_url > \"$output_file\" 2>&1";
-            
-            debug_log("Executing alternative command: $alt_cmd", $config);
-            exec($alt_cmd, $alt_output, $alt_return_var);
-            
-            if (!file_exists($output_file) || filesize($output_file) < 10) {
-                debug_log("Alternative approach failed. Return code: $alt_return_var", $config, 'ERROR');
-                return [
-                    'success' => false,
-                    'message' => 'Failed to retrieve video information'
-                ];
-            }
-        } else {
+        // Try a simpler approach
+        debug_log("Trying simpler approach", $config);
+        $simple_cmd = "$ytdlp_path --dump-json --skip-download $escaped_url > \"$output_file\" 2>&1";
+        debug_log("Executing simple command: $simple_cmd", $config);
+        exec($simple_cmd, $simple_output, $simple_return_var);
+        debug_log("Simple command returned: $simple_return_var", $config);
+        
+        if (!file_exists($output_file) || filesize($output_file) < 10) {
+            debug_log("Simple approach failed. Return code: $simple_return_var", $config, 'ERROR');
             return [
                 'success' => false,
                 'message' => 'Failed to retrieve video information'
@@ -369,6 +271,7 @@ function get_video_info($url, $config) {
     
     if (!$info) {
         debug_log("Failed to parse video info JSON: " . json_last_error_msg(), $config, 'ERROR');
+        debug_log("Raw content: " . substr($info_content, 0, 500) . "...", $config, 'ERROR');
         return [
             'success' => false,
             'message' => 'Failed to parse video information'
@@ -407,8 +310,6 @@ function get_video_info($url, $config) {
 
 // Function to download video directly with enhanced error handling
 function download_video($url, $format_key, $config) {
-    global $youtube_options, $tiktok_options;
-    
     debug_log("Starting direct download for URL: $url, Format: $format_key", $config);
     
     // Get video info to get the title
@@ -437,149 +338,44 @@ function download_video($url, $format_key, $config) {
     $temp_file = $config['temp_dir'] . uniqid('download_') . '.' . $ext;
     debug_log("Temp file: $temp_file", $config);
     
-    // Get a random user agent
-    $user_agent = get_random_user_agent($config);
-    $user_agent_arg = escapeshellarg($user_agent);
-    
-    // Build the command
+    // Build the command - simplified for troubleshooting
     $ytdlp_path = $config['ytdlp_path'];
     $escaped_url = escapeshellarg($url);
     $ffmpeg_path = escapeshellarg($config['ffmpeg_path']);
     
-    // Command to download to a temporary file with platform-specific options
+    // Basic download command
     if ($audio_only) {
-        if ($is_youtube) {
-            $cmd = "$ytdlp_path -f $format_str -x --audio-format $ext --audio-quality 0 --user-agent $user_agent_arg $youtube_options --ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
-        } else if ($is_tiktok) {
-            $cmd = "$ytdlp_path -f $format_str -x --audio-format $ext --audio-quality 0 --user-agent $user_agent_arg $tiktok_options --ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
-        } else {
-            $cmd = "$ytdlp_path -f $format_str -x --audio-format $ext --audio-quality 0 --user-agent $user_agent_arg --ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
-        }
+        $cmd = "$ytdlp_path -f $format_str -x --audio-format $ext --audio-quality 0 --no-check-certificate --ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
     } else {
-        if ($is_youtube) {
-            // Special handling for YouTube
-            $cmd = "$ytdlp_path -f $format_str --merge-output-format $ext --user-agent $user_agent_arg $youtube_options --add-header 'Accept-Language: en-US,en;q=0.9' --ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
-        } else if ($is_tiktok) {
-            // TikTok specific options
-            $cmd = "$ytdlp_path -f $format_str --merge-output-format $ext --user-agent $user_agent_arg $tiktok_options --ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
-        } else {
-            // Default for other platforms
-            $cmd = "$ytdlp_path -f $format_str --merge-output-format $ext --user-agent $user_agent_arg --ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
-        }
+        $cmd = "$ytdlp_path -f $format_str --merge-output-format $ext --no-check-certificate --ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
     }
     
     // Log the command
     debug_log("Executing download command: $cmd", $config);
     
-    // Set a timeout for the command execution
-    $descriptorspec = [
-        0 => ["pipe", "r"],  // stdin
-        1 => ["pipe", "w"],  // stdout
-        2 => ["pipe", "w"]   // stderr
-    ];
+    // Execute the command
+    exec($cmd, $output, $return_var);
     
-    $process = proc_open($cmd, $descriptorspec, $pipes);
-    
-    if (is_resource($process)) {
-        // Set pipes to non-blocking mode
-        stream_set_blocking($pipes[1], 0);
-        stream_set_blocking($pipes[2], 0);
-        
-        $output = '';
-        $error = '';
-        $start_time = time();
-        
-        // Check process status with timeout
-        while (true) {
-            $status = proc_get_status($process);
-            
-            // Read from stdout and stderr
-            $output .= stream_get_contents($pipes[1]);
-            $error .= stream_get_contents($pipes[2]);
-            
-            // Check if process has ended
-            if (!$status['running']) {
-                break;
-            }
-            
-            // Check for timeout
-            if (time() - $start_time > $config['download_timeout']) {
-                debug_log("Download process timed out after {$config['download_timeout']} seconds", $config, 'ERROR');
-                proc_terminate($process);
-                
-                header('Content-Type: application/json');
-                echo json_encode([
-                    'success' => false,
-                    'message' => 'Download process timed out. Try a different format or video.'
-                ]);
-                exit;
-            }
-            
-            // Sleep briefly to prevent CPU hogging
-            usleep(100000); // 0.1 seconds
-        }
-        
-        // Close pipes
-        fclose($pipes[0]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
-        
-        // Close process
-        $return_var = proc_close($process);
-    } else {
-        debug_log("Failed to start download process", $config, 'ERROR');
-        header('Content-Type: application/json');
-        echo json_encode([
-            'success' => false,
-            'message' => 'Failed to start download process'
-        ]);
-        exit;
-    }
-    
+    // Log the result
     debug_log("Download command returned: $return_var", $config);
-    debug_log("Command output: $output", $config);
-    debug_log("Command error: $error", $config);
     
     // Check if the file exists and has content
     if ($return_var !== 0 || !file_exists($temp_file) || filesize($temp_file) < 1000) { // File should be at least 1KB
         debug_log("Download failed or file too small. Return code: $return_var", $config, 'ERROR');
         
-        // Try an alternative approach for TikTok
-        if ($is_tiktok) {
-            debug_log("Trying alternative approach for TikTok", $config);
-            
-            // Use a different format for TikTok
-            $alt_cmd = "$ytdlp_path --no-warnings --no-check-certificate -f 'best[ext=mp4]' --user-agent $user_agent_arg --ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
-            
-            debug_log("Executing alternative TikTok command: $alt_cmd", $config);
-            exec($alt_cmd, $alt_output, $alt_return_var);
-            
-            if ($alt_return_var !== 0 || !file_exists($temp_file) || filesize($temp_file) < 1000) {
-                debug_log("Alternative TikTok approach failed. Return code: $alt_return_var", $config, 'ERROR');
-                header('Content-Type: application/json');
-                echo json_encode([
-                    'success' => false,
-                    'message' => 'Failed to download video'
-                ]);
-                exit;
-            }
-        } else {
+        // Try a simpler approach
+        debug_log("Trying simpler download approach", $config);
+        $simple_cmd = "$ytdlp_path --no-check-certificate -o \"$temp_file\" $escaped_url";
+        debug_log("Executing simple download command: $simple_cmd", $config);
+        exec($simple_cmd, $simple_output, $simple_return_var);
+        debug_log("Simple download command returned: $simple_return_var", $config);
+        
+        if ($simple_return_var !== 0 || !file_exists($temp_file) || filesize($temp_file) < 1000) {
+            debug_log("Simple download approach failed. Return code: $simple_return_var", $config, 'ERROR');
             header('Content-Type: application/json');
-            
-            $error_message = 'Failed to download video';
-            
-            // Check for common errors
-            if (strpos($error, 'This video is unavailable') !== false) {
-                $error_message = 'This video is unavailable or restricted';
-            } else if (strpos($error, 'Sign in to confirm your age') !== false) {
-                $error_message = 'Age-restricted video requires sign-in';
-            } else if (strpos($error, 'ERROR: Unable to extract') !== false) {
-                $error_message = 'Unable to extract video data. Format may not be supported';
-            }
-            
             echo json_encode([
                 'success' => false,
-                'message' => $error_message
+                'message' => 'Failed to download video'
             ]);
             
             // Clean up
@@ -1267,6 +1063,29 @@ $dependencies = check_dependencies($config);
             box-shadow: var(--box-shadow);
             z-index: 999;
         }
+        
+        /* Test buttons */
+        .test-buttons {
+            margin-top: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .test-button {
+            background-color: var(--info-color);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.3s;
+        }
+        
+        .test-button:hover {
+            background-color: #3a7bc8;
+        }
     </style>
 </head>
 <body>
@@ -1310,6 +1129,14 @@ $dependencies = check_dependencies($config);
                         <input type="text" id="video-url" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off">
                         <div id="url-input-spinner" class="url-input-spinner hidden"></div>
                     </div>
+                </div>
+                
+                <!-- Test buttons for quick testing -->
+                <div class="test-buttons">
+                    <button class="test-button" onclick="testUrl('https://www.youtube.com/shorts/9NHpoCMMIko')">Test YouTube Shorts</button>
+                    <button class="test-button" onclick="testUrl('https://vt.tiktok.com/ZShsdTSVr/')">Test TikTok</button>
+                    <button class="test-button" onclick="testUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')">Test YouTube</button>
+                    <button class="test-button" onclick="runDiagnostics()">Run Diagnostics</button>
                 </div>
             </div>
         </div>
@@ -1669,26 +1496,6 @@ $dependencies = check_dependencies($config);
                 }
             }
             
-            function showNotification(message) {
-                // Create notification element if it doesn't exist
-                let notification = document.getElementById('notification');
-                if (!notification) {
-                    notification = document.createElement('div');
-                    notification.id = 'notification';
-                    notification.className = 'notification';
-                    document.body.appendChild(notification);
-                }
-                
-                // Set message and show
-                notification.textContent = message;
-                notification.classList.add('show');
-                
-                // Hide after 5 seconds
-                setTimeout(() => {
-                    notification.classList.remove('show');
-                }, 5000);
-            }
-            
             function formatNumber(num) {
                 if (num === 'Unknown' || !num) return 'Unknown';
                 return new Intl.NumberFormat().format(num);
@@ -1719,6 +1526,66 @@ $dependencies = check_dependencies($config);
                 const timestamp = new Date().toLocaleTimeString();
                 debugContent.innerHTML += `[${timestamp}] ${message}\n`;
                 debugContent.scrollTop = debugContent.scrollHeight;
+            };
+            
+            // Test URL function
+            window.testUrl = function(url) {
+                videoUrlInput.value = url;
+                currentUrl = url;
+                getVideoInfo(url);
+            };
+            
+            // Run diagnostics function
+            window.runDiagnostics = function() {
+                window.logDebug('Running diagnostics...');
+                
+                // Show debug panel
+                document.getElementById('debug-panel').classList.remove('hidden');
+                
+                // Log browser info
+                window.logDebug('Browser: ' + navigator.userAgent);
+                
+                // Check dependencies
+                fetch('?action=check_dependencies')
+                    .then(response => response.json())
+                    .then(data => {
+                        window.logDebug('yt-dlp: ' + (data.ytdlp.installed ? 'Installed (' + data.ytdlp.version + ')' : 'Not installed'));
+                        window.logDebug('ffmpeg: ' + (data.ffmpeg.installed ? 'Installed' : 'Not installed'));
+                        
+                        if (!data.ytdlp.installed || !data.ffmpeg.installed) {
+                            window.logDebug('ERROR: Missing dependencies. Please install yt-dlp and ffmpeg.');
+                            showError('Missing dependencies. Please install yt-dlp and ffmpeg.');
+                        } else {
+                            window.logDebug('All dependencies are installed.');
+                            showSuccess('All dependencies are installed.');
+                            
+                            // Test directory permissions
+                            window.logDebug('Testing directory permissions...');
+                            
+                            // Create a test file in temp directory
+                            const testData = new FormData();
+                            testData.append('test', 'test');
+                            
+                            fetch('?action=test_permissions', {
+                                method: 'POST',
+                                body: testData
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    window.logDebug('Directory permissions: OK');
+                                } else {
+                                    window.logDebug('ERROR: Directory permissions issue: ' + data.message);
+                                }
+                            })
+                            .catch(error => {
+                                window.logDebug('ERROR: Failed to test directory permissions: ' + error.message);
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        window.logDebug('ERROR: Failed to check dependencies: ' + error.message);
+                    });
             };
             
             // Press Ctrl+Shift+D to toggle debug mode
