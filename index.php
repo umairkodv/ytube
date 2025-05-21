@@ -11,8 +11,8 @@ session_start();
 $config = [
     'temp_dir' => 'temp/',
     'log_dir' => 'logs/',
-    'ytdlp_path' => 'C:\\Windows\\yt-dlp\\yt-dlp.exe', // Update this path to your yt-dlp location
-    'ffmpeg_path' => 'C:\\Windows\\yt-dlp\\ffmpeg.exe', // Update this path to your ffmpeg location
+    'ytdlp_path' => 'yt-dlp',
+    'ffmpeg_path' => 'ffmpeg',
     'max_execution_time' => 600, // 10 minutes
     'download_timeout' => 180, // 3 minutes
     'rate_limit' => [
