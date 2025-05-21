@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+# Verify python3 and pip3 installation
+RUN python3 --version && pip3 --version
+
 # Install yt-dlp via pip
 RUN pip3 install yt-dlp
 
