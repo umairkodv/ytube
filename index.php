@@ -7,12 +7,18 @@ error_reporting(E_ALL);
 // Start session for tracking downloads
 session_start();
 
+// Find the full path to ffmpeg
+$ffmpeg_path = trim(shell_exec('which ffmpeg'));
+if (empty($ffmpeg_path)) {
+    $ffmpeg_path = 'ffmpeg'; // Fallback to just the command name
+}
+
 // Configuration
 $config = [
     'temp_dir' => 'temp/',
     'log_dir' => 'logs/',
     'ytdlp_path' => 'yt-dlp',
-    'ffmpeg_path' => 'ffmpeg',
+    'ffmpeg_path' => $ffmpeg_path, // Using full path
     'max_execution_time' => 600, // 10 minutes
     'download_timeout' => 180, // 3 minutes
     'rate_limit' => [
@@ -58,6 +64,9 @@ $config = [
     'debug' => true
 ];
 
+// YouTube specific options to avoid rate limiting
+$youtube_options = '--sleep-interval 2 --max-sleep-interval 5 --extractor-args "youtube:player_client=android" --geo-bypass';
+
 // Set max execution time
 ini_set('max_execution_time', $config['max_execution_time']);
 
@@ -67,6 +76,13 @@ foreach ([$config['temp_dir'], $config['log_dir']] as $dir) {
         mkdir($dir, 0755, true);
     }
 }
+
+// Create cache directory with proper permissions
+$cache_dir = '/tmp/yt-dlp-cache/';
+if (!file_exists($cache_dir)) {
+    mkdir($cache_dir, 0777, true);
+}
+putenv("XDG_CACHE_HOME={$cache_dir}");
 
 // Debug log function
 function debug_log($message, $config) {
@@ -183,17 +199,20 @@ function check_rate_limit($config) {
 
 // Function to get video info
 function get_video_info($url, $config) {
+    global $youtube_options;
+    
     debug_log("Getting video info for URL: $url", $config);
     $ytdlp_path = $config['ytdlp_path'];
     $url = escapeshellarg($url);
     $output_file = $config['temp_dir'] . 'info_' . md5(uniqid() . $url) . '.json';
     
-    // Check if this is a YouTube Shorts URL
+    // Check if this is a YouTube URL (shorts or regular)
+    $is_youtube = (strpos($url, 'youtube.com') !== false || strpos($url, 'youtu.be') !== false);
     $is_youtube_shorts = (strpos($url, 'youtube.com/shorts') !== false || strpos($url, 'youtu.be/') !== false);
     
     // Get basic info
-    if ($is_youtube_shorts) {
-        $cmd = $ytdlp_path . ' -J --no-check-certificate --no-cache-dir --extractor-args "youtube:player_client=web" ' . $url . ' > "' . $output_file . '" 2>&1';
+    if ($is_youtube) {
+        $cmd = $ytdlp_path . ' -J --no-check-certificate --no-cache-dir ' . $youtube_options . ' ' . $url . ' > "' . $output_file . '" 2>&1';
     } else {
         $cmd = $ytdlp_path . ' -J --no-check-certificate --no-cache-dir ' . $url . ' > "' . $output_file . '" 2>&1';
     }
@@ -246,13 +265,16 @@ function get_video_info($url, $config) {
             'thumbnail' => $info['thumbnail'] ?? '',
             'sanitized_title' => $sanitized_title,
             'ext_id' => $info['id'] ?? md5($url),
-            'is_shorts' => $is_youtube_shorts
+            'is_shorts' => $is_youtube_shorts,
+            'is_youtube' => $is_youtube
         ]
     ];
 }
 
 // Function to download video directly (no iframe)
 function download_video($url, $format_key, $config) {
+    global $youtube_options;
+    
     debug_log("Starting direct download for URL: $url, Format: $format_key", $config);
     
     // Get video info to get the title
@@ -274,7 +296,7 @@ function download_video($url, $format_key, $config) {
     $ext = $format['ext'];
     $format_str = $format['format'];
     $audio_only = isset($format['audio_only']) && $format['audio_only'];
-    $is_shorts = $info['is_shorts'] ?? false;
+    $is_youtube = $info['is_youtube'] ?? false;
     
     // Create a temporary file
     $temp_file = $config['temp_dir'] . uniqid('download_') . '.' . $ext;
@@ -286,13 +308,13 @@ function download_video($url, $format_key, $config) {
     
     // Command to download to a temporary file
     if ($audio_only) {
-        $cmd = $ytdlp_path . ' -f ' . escapeshellarg($format_str) . ' -x --audio-format ' . $ext . ' --audio-quality 0 --no-check-certificate --no-cache-dir -o "' . $temp_file . '" ' . $url;
+        $cmd = $ytdlp_path . ' -f ' . escapeshellarg($format_str) . ' -x --audio-format ' . $ext . ' --audio-quality 0 --no-check-certificate --no-cache-dir --ffmpeg-location ' . escapeshellarg($config['ffmpeg_path']) . ' -o "' . $temp_file . '" ' . $url;
     } else {
-        if ($is_shorts) {
-            // Special handling for YouTube Shorts
-            $cmd = $ytdlp_path . ' -f ' . escapeshellarg($format_str) . ' --merge-output-format ' . $ext . ' --no-check-certificate --no-cache-dir --extractor-args "youtube:player_client=web" -o "' . $temp_file . '" ' . $url;
+        if ($is_youtube) {
+            // Special handling for YouTube
+            $cmd = $ytdlp_path . ' -f ' . escapeshellarg($format_str) . ' --merge-output-format ' . $ext . ' --no-check-certificate --no-cache-dir ' . $youtube_options . ' --ffmpeg-location ' . escapeshellarg($config['ffmpeg_path']) . ' -o "' . $temp_file . '" ' . $url;
         } else {
-            $cmd = $ytdlp_path . ' -f ' . escapeshellarg($format_str) . ' --merge-output-format ' . $ext . ' --no-check-certificate --no-cache-dir -o "' . $temp_file . '" ' . $url;
+            $cmd = $ytdlp_path . ' -f ' . escapeshellarg($format_str) . ' --merge-output-format ' . $ext . ' --no-check-certificate --no-cache-dir --ffmpeg-location ' . escapeshellarg($config['ffmpeg_path']) . ' -o "' . $temp_file . '" ' . $url;
         }
     }
     
