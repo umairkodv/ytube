@@ -63,6 +63,19 @@ $config = [
         'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36',
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:90.0) Gecko/20100101 Firefox/90.0',
         'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1'
+    ],
+    // YouTube specific options
+    'youtube_options' => [
+        '--no-check-certificate',
+        '--no-warnings',
+        '--ignore-errors',
+        '--extractor-args "youtube:player_client=android,web"',
+        '--prefer-insecure',
+        '--force-ipv4',
+        '--geo-bypass',
+        '--no-playlist',
+        '--no-cache-dir',
+        '--rm-cache-dir'
     ]
 ];
 
@@ -226,14 +239,16 @@ function get_video_info($url, $config) {
     $is_youtube = (strpos($url, 'youtube.com') !== false || strpos($url, 'youtu.be') !== false);
     $is_youtube_shorts = (strpos($url, 'youtube.com/shorts') !== false);
     $is_tiktok = (strpos($url, 'tiktok.com') !== false);
+    $is_instagram = (strpos($url, 'instagram.com') !== false);
+    $is_facebook = (strpos($url, 'facebook.com') !== false || strpos($url, 'fb.watch') !== false);
     
     // YouTube-specific approach
     if ($is_youtube) {
-        debug_log("Using YouTube-specific approach", $config);
+        debug_log("Using YouTube-specific approach for info", $config);
         
         // First try: Use YouTube-specific options
-        $youtube_cmd = "$ytdlp_path --no-check-certificate --no-warnings --ignore-errors " .
-                      "--extractor-args \"youtube:player_client=android\" " .
+        $youtube_options = implode(' ', $config['youtube_options']);
+        $youtube_cmd = "$ytdlp_path $youtube_options " .
                       "--user-agent $user_agent_arg " .
                       "--dump-json $escaped_url > \"$output_file\" 2>&1";
         
@@ -395,6 +410,162 @@ function get_video_info($url, $config) {
         ];
     }
     
+    // Instagram-specific approach
+    if ($is_instagram) {
+        debug_log("Using Instagram-specific approach", $config);
+        
+        // Instagram requires cookies and specific headers
+        $instagram_cmd = "$ytdlp_path --no-check-certificate --no-warnings --ignore-errors " .
+                        "--user-agent $user_agent_arg " .
+                        "--add-header \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8\" " .
+                        "--add-header \"Accept-Language: en-US,en;q=0.5\" " .
+                        "--dump-json $escaped_url > \"$output_file\" 2>&1";
+        
+        debug_log("Executing Instagram command: $instagram_cmd", $config);
+        exec($instagram_cmd, $instagram_output, $instagram_return_var);
+        debug_log("Instagram command returned: $instagram_return_var", $config);
+        
+        // Check if the output file exists and has valid content
+        if (file_exists($output_file) && filesize($output_file) > 10) {
+            $info_content = file_get_contents($output_file);
+            
+            // Try to parse the JSON
+            $info = json_decode($info_content, true);
+            
+            if ($info) {
+                debug_log("Successfully parsed Instagram content", $config);
+                
+                // Clean up the file
+                @unlink($output_file);
+                
+                // Sanitize filename for download
+                $title = $info['title'] ?? 'Instagram Video';
+                $sanitized_title = preg_replace('/[^\w\s\-]/u', '', $title);
+                $sanitized_title = str_replace(' ', '_', $sanitized_title);
+                $sanitized_title = substr($sanitized_title, 0, 100);
+                if (empty($sanitized_title)) {
+                    $sanitized_title = 'Instagram_Video_' . time();
+                }
+                
+                return [
+                    'success' => true,
+                    'info' => [
+                        'title' => $title,
+                        'uploader' => $info['uploader'] ?? 'Instagram User',
+                        'duration' => isset($info['duration']) ? gmdate("H:i:s", $info['duration']) : 'Unknown',
+                        'upload_date' => isset($info['upload_date']) ? 
+                            date("Y-m-d", strtotime($info['upload_date'])) : 'Unknown',
+                        'view_count' => $info['view_count'] ?? 'Unknown',
+                        'like_count' => $info['like_count'] ?? 'Unknown',
+                        'thumbnail' => $info['thumbnail'] ?? '',
+                        'sanitized_title' => $sanitized_title,
+                        'ext_id' => $info['id'] ?? md5($url),
+                        'is_instagram' => true
+                    ]
+                ];
+            } else {
+                debug_log("Failed to parse Instagram JSON: " . json_last_error_msg(), $config, 'ERROR');
+                debug_log("Raw Instagram content: " . substr($info_content, 0, 500) . "...", $config, 'ERROR');
+            }
+        }
+        
+        // Fallback for Instagram
+        debug_log("Instagram approach failed, using fallback", $config);
+        return [
+            'success' => true,
+            'info' => [
+                'title' => 'Instagram Content',
+                'uploader' => 'Instagram User',
+                'duration' => 'Unknown',
+                'upload_date' => date("Y-m-d"),
+                'view_count' => 'Unknown',
+                'like_count' => 'Unknown',
+                'thumbnail' => '',
+                'sanitized_title' => 'Instagram_Content_' . time(),
+                'ext_id' => md5($url),
+                'is_instagram' => true
+            ]
+        ];
+    }
+    
+    // Facebook-specific approach
+    if ($is_facebook) {
+        debug_log("Using Facebook-specific approach", $config);
+        
+        // Facebook requires cookies and specific headers
+        $facebook_cmd = "$ytdlp_path --no-check-certificate --no-warnings --ignore-errors " .
+                       "--user-agent $user_agent_arg " .
+                       "--add-header \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8\" " .
+                       "--add-header \"Accept-Language: en-US,en;q=0.5\" " .
+                       "--dump-json $escaped_url > \"$output_file\" 2>&1";
+        
+        debug_log("Executing Facebook command: $facebook_cmd", $config);
+        exec($facebook_cmd, $facebook_output, $facebook_return_var);
+        debug_log("Facebook command returned: $facebook_return_var", $config);
+        
+        // Check if the output file exists and has valid content
+        if (file_exists($output_file) && filesize($output_file) > 10) {
+            $info_content = file_get_contents($output_file);
+            
+            // Try to parse the JSON
+            $info = json_decode($info_content, true);
+            
+            if ($info) {
+                debug_log("Successfully parsed Facebook content", $config);
+                
+                // Clean up the file
+                @unlink($output_file);
+                
+                // Sanitize filename for download
+                $title = $info['title'] ?? 'Facebook Video';
+                $sanitized_title = preg_replace('/[^\w\s\-]/u', '', $title);
+                $sanitized_title = str_replace(' ', '_', $sanitized_title);
+                $sanitized_title = substr($sanitized_title, 0, 100);
+                if (empty($sanitized_title)) {
+                    $sanitized_title = 'Facebook_Video_' . time();
+                }
+                
+                return [
+                    'success' => true,
+                    'info' => [
+                        'title' => $title,
+                        'uploader' => $info['uploader'] ?? 'Facebook User',
+                        'duration' => isset($info['duration']) ? gmdate("H:i:s", $info['duration']) : 'Unknown',
+                        'upload_date' => isset($info['upload_date']) ? 
+                            date("Y-m-d", strtotime($info['upload_date'])) : 'Unknown',
+                        'view_count' => $info['view_count'] ?? 'Unknown',
+                        'like_count' => $info['like_count'] ?? 'Unknown',
+                        'thumbnail' => $info['thumbnail'] ?? '',
+                        'sanitized_title' => $sanitized_title,
+                        'ext_id' => $info['id'] ?? md5($url),
+                        'is_facebook' => true
+                    ]
+                ];
+            } else {
+                debug_log("Failed to parse Facebook JSON: " . json_last_error_msg(), $config, 'ERROR');
+                debug_log("Raw Facebook content: " . substr($info_content, 0, 500) . "...", $config, 'ERROR');
+            }
+        }
+        
+        // Fallback for Facebook
+        debug_log("Facebook approach failed, using fallback", $config);
+        return [
+            'success' => true,
+            'info' => [
+                'title' => 'Facebook Content',
+                'uploader' => 'Facebook User',
+                'duration' => 'Unknown',
+                'upload_date' => date("Y-m-d"),
+                'view_count' => 'Unknown',
+                'like_count' => 'Unknown',
+                'thumbnail' => '',
+                'sanitized_title' => 'Facebook_Content_' . time(),
+                'ext_id' => md5($url),
+                'is_facebook' => true
+            ]
+        ];
+    }
+    
     // TikTok and other platforms - use the working approach
     $cmd = "$ytdlp_path -J --no-check-certificate --no-warnings $escaped_url > \"$output_file\" 2>&1";
     
@@ -501,9 +672,12 @@ function download_video($url, $format_key, $config) {
     $audio_only = isset($format['audio_only']) && $format['audio_only'];
     $is_youtube = $info['is_youtube'] ?? false;
     $is_tiktok = $info['is_tiktok'] ?? false;
+    $is_instagram = $info['is_instagram'] ?? false;
+    $is_facebook = $info['is_facebook'] ?? false;
     
     // Create a temporary file with unique name
     $temp_file = $config['temp_dir'] . uniqid('download_') . '.' . $ext;
+    $error_log_file = $config['temp_dir'] . uniqid('error_') . '.log';
     debug_log("Temp file: $temp_file", $config);
     
     // Get a random user agent
@@ -515,66 +689,146 @@ function download_video($url, $format_key, $config) {
     $escaped_url = escapeshellarg($url);
     $ffmpeg_path = escapeshellarg($config['ffmpeg_path']);
     
-    // YouTube-specific download command
+    // YouTube-specific download command with multiple fallback methods
     if ($is_youtube) {
         debug_log("Using YouTube-specific download approach", $config);
         
-        if ($audio_only) {
-            $cmd = "$ytdlp_path -f $format_str -x --audio-format $ext --audio-quality 0 " .
-                  "--no-check-certificate --no-warnings --ignore-errors " .
-                  "--extractor-args \"youtube:player_client=android\" " .
+        // Try multiple methods for YouTube
+        $success = false;
+        
+        // Method 1: Use youtube-dl format with all options
+        if (!$success) {
+            debug_log("Trying YouTube download method 1", $config);
+            
+            $youtube_options = implode(' ', $config['youtube_options']);
+            
+            if ($audio_only) {
+                $cmd = "$ytdlp_path $youtube_options -f $format_str -x --audio-format $ext --audio-quality 0 " .
+                      "--user-agent $user_agent_arg " .
+                      "--ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url 2>\"$error_log_file\"";
+            } else {
+                $cmd = "$ytdlp_path $youtube_options -f $format_str --merge-output-format $ext " .
+                      "--user-agent $user_agent_arg " .
+                      "--ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url 2>\"$error_log_file\"";
+            }
+            
+            debug_log("Executing YouTube download method 1: $cmd", $config);
+            exec($cmd, $output, $return_var);
+            debug_log("YouTube download method 1 returned: $return_var", $config);
+            
+            if ($return_var === 0 && file_exists($temp_file) && filesize($temp_file) > 1000) {
+                $success = true;
+                debug_log("YouTube download method 1 succeeded", $config);
+            } else {
+                // Log the error output
+                if (file_exists($error_log_file)) {
+                    $error_content = file_get_contents($error_log_file);
+                    debug_log("YouTube download method 1 error: " . $error_content, $config, 'ERROR');
+                    @unlink($error_log_file);
+                }
+            }
+        }
+        
+        // Method 2: Use direct URL with format ID
+        if (!$success) {
+            debug_log("Trying YouTube download method 2", $config);
+            
+            // Extract video ID
+            $video_id = '';
+            if (strpos($url, 'youtube.com/watch') !== false) {
+                parse_str(parse_url($url, PHP_URL_QUERY), $query_params);
+                $video_id = $query_params['v'] ?? '';
+            } else if (strpos($url, 'youtube.com/shorts/') !== false) {
+                $parts = explode('/', parse_url($url, PHP_URL_PATH));
+                $video_id = end($parts);
+            } else if (strpos($url, 'youtu.be/') !== false) {
+                $parts = explode('/', parse_url($url, PHP_URL_PATH));
+                $video_id = end($parts);
+            }
+            
+            if (!empty($video_id)) {
+                // Try with a simpler format string
+                $simple_format = $audio_only ? "bestaudio" : "best";
+                $cmd = "$ytdlp_path --no-check-certificate --no-warnings --ignore-errors " .
+                      "-f $simple_format " .
+                      "--user-agent $user_agent_arg " .
+                      "--ffmpeg-location $ffmpeg_path -o \"$temp_file\" " .
+                      "https://www.youtube.com/watch?v=$video_id 2>\"$error_log_file\"";
+                
+                debug_log("Executing YouTube download method 2: $cmd", $config);
+                exec($cmd, $output, $return_var);
+                debug_log("YouTube download method 2 returned: $return_var", $config);
+                
+                if ($return_var === 0 && file_exists($temp_file) && filesize($temp_file) > 1000) {
+                    $success = true;
+                    debug_log("YouTube download method 2 succeeded", $config);
+                } else {
+                    // Log the error output
+                    if (file_exists($error_log_file)) {
+                        $error_content = file_get_contents($error_log_file);
+                        debug_log("YouTube download method 2 error: " . $error_content, $config, 'ERROR');
+                        @unlink($error_log_file);
+                    }
+                }
+            }
+        }
+        
+        // Method 3: Use youtube-dl directly with minimal options
+        if (!$success) {
+            debug_log("Trying YouTube download method 3", $config);
+            
+            $cmd = "$ytdlp_path --no-check-certificate --no-warnings --ignore-errors " .
                   "--user-agent $user_agent_arg " .
-                  "--ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
-        } else {
-            $cmd = "$ytdlp_path -f $format_str --merge-output-format $ext " .
-                  "--no-check-certificate --no-warnings --ignore-errors " .
-                  "--extractor-args \"youtube:player_client=android\" " .
-                  "--user-agent $user_agent_arg " .
-                  "--ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
-        }
-    } 
-    // TikTok and other platforms - use the working approach
-    else {
-        if ($audio_only) {
-            $cmd = "$ytdlp_path -f $format_str -x --audio-format $ext --audio-quality 0 " .
-                  "--no-check-certificate --ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
-        } else {
-            $cmd = "$ytdlp_path -f $format_str --merge-output-format $ext " .
-                  "--no-check-certificate --ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
-        }
-    }
-    
-    // Log the command
-    debug_log("Executing download command: $cmd", $config);
-    
-    // Execute the command
-    exec($cmd, $output, $return_var);
-    
-    // Log the result
-    debug_log("Download command returned: $return_var", $config);
-    
-    // Check if the file exists and has content
-    if ($return_var !== 0 || !file_exists($temp_file) || filesize($temp_file) < 1000) { // File should be at least 1KB
-        debug_log("Download failed or file too small. Return code: $return_var", $config, 'ERROR');
-        
-        // Try a simpler approach
-        debug_log("Trying simpler download approach", $config);
-        
-        if ($is_youtube) {
-            // YouTube-specific fallback
-            $simple_cmd = "$ytdlp_path --no-check-certificate --no-warnings --ignore-errors " .
-                         "--user-agent $user_agent_arg " .
-                         "-o \"$temp_file\" $escaped_url";
-        } else {
-            $simple_cmd = "$ytdlp_path --no-check-certificate -o \"$temp_file\" $escaped_url";
+                  "-o \"$temp_file\" $escaped_url 2>\"$error_log_file\"";
+            
+            debug_log("Executing YouTube download method 3: $cmd", $config);
+            exec($cmd, $output, $return_var);
+            debug_log("YouTube download method 3 returned: $return_var", $config);
+            
+            if ($return_var === 0 && file_exists($temp_file) && filesize($temp_file) > 1000) {
+                $success = true;
+                debug_log("YouTube download method 3 succeeded", $config);
+            } else {
+                // Log the error output
+                if (file_exists($error_log_file)) {
+                    $error_content = file_get_contents($error_log_file);
+                    debug_log("YouTube download method 3 error: " . $error_content, $config, 'ERROR');
+                    @unlink($error_log_file);
+                }
+            }
         }
         
-        debug_log("Executing simple download command: $simple_cmd", $config);
-        exec($simple_cmd, $simple_output, $simple_return_var);
-        debug_log("Simple download command returned: $simple_return_var", $config);
+        // Method 4: Try with a different user agent
+        if (!$success) {
+            debug_log("Trying YouTube download method 4", $config);
+            
+            // Use a mobile user agent
+            $mobile_agent = escapeshellarg('Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1');
+            
+            $cmd = "$ytdlp_path --no-check-certificate --no-warnings --ignore-errors " .
+                  "--user-agent $mobile_agent " .
+                  "-o \"$temp_file\" $escaped_url 2>\"$error_log_file\"";
+            
+            debug_log("Executing YouTube download method 4: $cmd", $config);
+            exec($cmd, $output, $return_var);
+            debug_log("YouTube download method 4 returned: $return_var", $config);
+            
+            if ($return_var === 0 && file_exists($temp_file) && filesize($temp_file) > 1000) {
+                $success = true;
+                debug_log("YouTube download method 4 succeeded", $config);
+            } else {
+                // Log the error output
+                if (file_exists($error_log_file)) {
+                    $error_content = file_get_contents($error_log_file);
+                    debug_log("YouTube download method 4 error: " . $error_content, $config, 'ERROR');
+                    @unlink($error_log_file);
+                }
+            }
+        }
         
-        if ($simple_return_var !== 0 || !file_exists($temp_file) || filesize($temp_file) < 1000) {
-            debug_log("Simple download approach failed. Return code: $simple_return_var", $config, 'ERROR');
+        // If all methods failed
+        if (!$success) {
+            debug_log("All YouTube download methods failed", $config, 'ERROR');
             header('Content-Type: application/json');
             echo json_encode([
                 'success' => false,
@@ -585,9 +839,154 @@ function download_video($url, $format_key, $config) {
             if (file_exists($temp_file)) {
                 unlink($temp_file);
             }
+            if (file_exists($error_log_file)) {
+                unlink($error_log_file);
+            }
             
             exit;
         }
+    }
+    // Instagram-specific download command
+    else if ($is_instagram) {
+        debug_log("Using Instagram-specific download approach", $config);
+        
+        $cmd = "$ytdlp_path --no-check-certificate --no-warnings --ignore-errors " .
+              "--user-agent $user_agent_arg " .
+              "--add-header \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8\" " .
+              "--add-header \"Accept-Language: en-US,en;q=0.5\" " .
+              "-o \"$temp_file\" $escaped_url 2>\"$error_log_file\"";
+        
+        debug_log("Executing Instagram download command: $cmd", $config);
+        exec($cmd, $output, $return_var);
+        debug_log("Instagram download command returned: $return_var", $config);
+        
+        if ($return_var !== 0 || !file_exists($temp_file) || filesize($temp_file) < 1000) {
+            // Log the error output
+            if (file_exists($error_log_file)) {
+                $error_content = file_get_contents($error_log_file);
+                debug_log("Instagram download error: " . $error_content, $config, 'ERROR');
+                @unlink($error_log_file);
+            }
+            
+            debug_log("Instagram download failed", $config, 'ERROR');
+            header('Content-Type: application/json');
+            echo json_encode([
+                'success' => false,
+                'message' => 'Failed to download Instagram content'
+            ]);
+            
+            // Clean up
+            if (file_exists($temp_file)) {
+                unlink($temp_file);
+            }
+            
+            exit;
+        }
+    }
+    // Facebook-specific download command
+    else if ($is_facebook) {
+        debug_log("Using Facebook-specific download approach", $config);
+        
+        $cmd = "$ytdlp_path --no-check-certificate --no-warnings --ignore-errors " .
+              "--user-agent $user_agent_arg " .
+              "--add-header \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8\" " .
+              "--add-header \"Accept-Language: en-US,en;q=0.5\" " .
+              "-o \"$temp_file\" $escaped_url 2>\"$error_log_file\"";
+        
+        debug_log("Executing Facebook download command: $cmd", $config);
+        exec($cmd, $output, $return_var);
+        debug_log("Facebook download command returned: $return_var", $config);
+        
+        if ($return_var !== 0 || !file_exists($temp_file) || filesize($temp_file) < 1000) {
+            // Log the error output
+            if (file_exists($error_log_file)) {
+                $error_content = file_get_contents($error_log_file);
+                debug_log("Facebook download error: " . $error_content, $config, 'ERROR');
+                @unlink($error_log_file);
+            }
+            
+            debug_log("Facebook download failed", $config, 'ERROR');
+            header('Content-Type: application/json');
+            echo json_encode([
+                'success' => false,
+                'message' => 'Failed to download Facebook content'
+            ]);
+            
+            // Clean up
+            if (file_exists($temp_file)) {
+                unlink($temp_file);
+            }
+            
+            exit;
+        }
+    }
+    // TikTok and other platforms - use the working approach
+    else {
+        if ($audio_only) {
+            $cmd = "$ytdlp_path -f $format_str -x --audio-format $ext --audio-quality 0 " .
+                  "--no-check-certificate --ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url 2>\"$error_log_file\"";
+        } else {
+            $cmd = "$ytdlp_path -f $format_str --merge-output-format $ext " .
+                  "--no-check-certificate --ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url 2>\"$error_log_file\"";
+        }
+        
+        // Log the command
+        debug_log("Executing download command: $cmd", $config);
+        
+        // Execute the command
+        exec($cmd, $output, $return_var);
+        
+        // Log the result
+        debug_log("Download command returned: $return_var", $config);
+        
+        // Check if the file exists and has content
+        if ($return_var !== 0 || !file_exists($temp_file) || filesize($temp_file) < 1000) { // File should be at least 1KB
+            // Log the error output
+            if (file_exists($error_log_file)) {
+                $error_content = file_get_contents($error_log_file);
+                debug_log("Download error: " . $error_content, $config, 'ERROR');
+                @unlink($error_log_file);
+            }
+            
+            debug_log("Download failed or file too small. Return code: $return_var", $config, 'ERROR');
+            
+            // Try a simpler approach
+            debug_log("Trying simpler download approach", $config);
+            
+            $simple_cmd = "$ytdlp_path --no-check-certificate -o \"$temp_file\" $escaped_url 2>\"$error_log_file\"";
+            
+            debug_log("Executing simple download command: $simple_cmd", $config);
+            exec($simple_cmd, $simple_output, $simple_return_var);
+            debug_log("Simple download command returned: $simple_return_var", $config);
+            
+            if ($simple_return_var !== 0 || !file_exists($temp_file) || filesize($temp_file) < 1000) {
+                // Log the error output
+                if (file_exists($error_log_file)) {
+                    $error_content = file_get_contents($error_log_file);
+                    debug_log("Simple download error: " . $error_content, $config, 'ERROR');
+                    @unlink($error_log_file);
+                }
+                
+                debug_log("Simple download approach failed. Return code: $simple_return_var", $config, 'ERROR');
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Failed to download video'
+                ]);
+                
+                // Clean up
+                if (file_exists($temp_file)) {
+                    unlink($temp_file);
+                }
+                
+                exit;
+            }
+        }
+    }
+    
+    // Clean up error log file if it exists
+    if (file_exists($error_log_file)) {
+        @unlink($error_log_file);
     }
     
     // File exists and has content, prepare for download
@@ -679,6 +1078,24 @@ function test_permissions($config) {
         'success' => true,
         'message' => 'Directory permissions are correct'
     ];
+}
+
+// Function to update yt-dlp
+function update_ytdlp($config) {
+    debug_log("Updating yt-dlp", $config);
+    $ytdlp_path = $config['ytdlp_path'];
+    
+    $cmd = "$ytdlp_path -U 2>&1";
+    exec($cmd, $output, $return_var);
+    
+    $result = [
+        'success' => ($return_var === 0),
+        'message' => implode("\n", $output),
+        'code' => $return_var
+    ];
+    
+    debug_log("yt-dlp update result: " . ($result['success'] ? 'Success' : 'Failed') . " - " . $result['message'], $config);
+    return $result;
 }
 
 // Handle download request
@@ -774,6 +1191,10 @@ if (isset($_GET['action'])) {
             
         case 'test_permissions':
             echo json_encode(test_permissions($config));
+            break;
+            
+        case 'update_ytdlp':
+            echo json_encode(update_ytdlp($config));
             break;
             
         default:
@@ -1353,6 +1774,33 @@ $dependencies = check_dependencies($config);
         .tiktok-badge {
             background-color: #000000;
         }
+        
+        .instagram-badge {
+            background-color: #C13584;
+        }
+        
+        .facebook-badge {
+            background-color: #3b5998;
+        }
+        
+        /* Admin actions */
+        .admin-actions {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: var(--border-radius);
+            border: 1px solid #dee2e6;
+        }
+        
+        .admin-actions h4 {
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+        
+        .admin-actions .btn {
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
@@ -1404,6 +1852,7 @@ $dependencies = check_dependencies($config);
                     <button class="test-button" onclick="testUrl('https://vt.tiktok.com/ZShsdTSVr/')">Test TikTok</button>
                     <button class="test-button" onclick="testUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')">Test YouTube</button>
                     <button class="test-button" onclick="runDiagnostics()">Run Diagnostics</button>
+                    <button class="test-button" onclick="updateYtDlp()">Update yt-dlp</button>
                 </div>
             </div>
         </div>
@@ -1557,11 +2006,17 @@ $dependencies = check_dependencies($config);
                 // Show full-screen loading overlay for fetching video info
                 const isYoutube = url.includes('youtube.com') || url.includes('youtu.be');
                 const isTiktok = url.includes('tiktok.com');
+                const isInstagram = url.includes('instagram.com');
+                const isFacebook = url.includes('facebook.com') || url.includes('fb.watch');
                 
                 if (isYoutube) {
                     updateLoadingText('Fetching YouTube video information...', 'YouTube videos may take longer to process. Please be patient.');
                 } else if (isTiktok) {
                     updateLoadingText('Fetching TikTok video information...', 'Please wait while we analyze the video.');
+                } else if (isInstagram) {
+                    updateLoadingText('Fetching Instagram content...', 'Instagram content may take longer to process. Please be patient.');
+                } else if (isFacebook) {
+                    updateLoadingText('Fetching Facebook content...', 'Facebook content may take longer to process. Please be patient.');
                 } else {
                     updateLoadingText('Fetching video information...', 'Please wait while we analyze the video.');
                 }
@@ -1610,6 +2065,8 @@ $dependencies = check_dependencies($config);
                 const isShorts = info.is_shorts || false;
                 const isYoutube = info.is_youtube || false;
                 const isTiktok = info.is_tiktok || false;
+                const isInstagram = info.is_instagram || false;
+                const isFacebook = info.is_facebook || false;
                 
                 // Create platform badge
                 let platformBadge = '';
@@ -1620,6 +2077,10 @@ $dependencies = check_dependencies($config);
                     }
                 } else if (isTiktok) {
                     platformBadge = '<span class="platform-badge tiktok-badge">TikTok</span>';
+                } else if (isInstagram) {
+                    platformBadge = '<span class="platform-badge instagram-badge">Instagram</span>';
+                } else if (isFacebook) {
+                    platformBadge = '<span class="platform-badge facebook-badge">Facebook</span>';
                 }
                 
                 // Display video info
@@ -1642,6 +2103,8 @@ $dependencies = check_dependencies($config);
                         </div>
                         ${isYoutube ? '<div class="alert alert-info" style="margin-top: 10px;"><i class="fas fa-info-circle"></i> YouTube videos may take longer to download due to anti-scraping measures.</div>' : ''}
                         ${isTiktok ? '<div class="alert alert-info" style="margin-top: 10px;"><i class="fas fa-info-circle"></i> TikTok videos may require multiple attempts to download.</div>' : ''}
+                        ${isInstagram ? '<div class="alert alert-info" style="margin-top: 10px;"><i class="fas fa-info-circle"></i> Instagram content may require login cookies for some private content.</div>' : ''}
+                        ${isFacebook ? '<div class="alert alert-info" style="margin-top: 10px;"><i class="fas fa-info-circle"></i> Facebook content may require login cookies for some private content.</div>' : ''}
                     </div>
                 `;
                 
@@ -1700,11 +2163,17 @@ $dependencies = check_dependencies($config);
                 // Show loading overlay with download message
                 const isYoutube = url.includes('youtube.com') || url.includes('youtu.be');
                 const isTiktok = url.includes('tiktok.com');
+                const isInstagram = url.includes('instagram.com');
+                const isFacebook = url.includes('facebook.com') || url.includes('fb.watch');
                 
                 if (isYoutube) {
                     updateLoadingText('Preparing YouTube download...', 'YouTube videos may take longer to process. Please be patient.');
                 } else if (isTiktok) {
                     updateLoadingText('Preparing TikTok download...', 'Please wait while we process your download.');
+                } else if (isInstagram) {
+                    updateLoadingText('Preparing Instagram download...', 'Instagram content may take longer to process. Please be patient.');
+                } else if (isFacebook) {
+                    updateLoadingText('Preparing Facebook download...', 'Facebook content may take longer to process. Please be patient.');
                 } else {
                     updateLoadingText('Preparing your download...', 'This may take a moment. Please don\'t close this page.');
                 }
@@ -1866,6 +2335,37 @@ $dependencies = check_dependencies($config);
                     })
                     .catch(error => {
                         window.logDebug('ERROR: Failed to check dependencies: ' + error.message);
+                    });
+            };
+            
+            // Update yt-dlp function
+            window.updateYtDlp = function() {
+                window.logDebug('Updating yt-dlp...');
+                
+                // Show debug panel
+                document.getElementById('debug-panel').classList.remove('hidden');
+                
+                // Show loading overlay
+                updateLoadingText('Updating yt-dlp...', 'This may take a moment. Please wait.');
+                loadingOverlay.classList.remove('hidden');
+                
+                fetch('?action=update_ytdlp')
+                    .then(response => response.json())
+                    .then(data => {
+                        loadingOverlay.classList.add('hidden');
+                        
+                        if (data.success) {
+                            window.logDebug('yt-dlp update successful: ' + data.message);
+                            showSuccess('yt-dlp updated successfully. Please refresh the page.');
+                        } else {
+                            window.logDebug('ERROR: yt-dlp update failed: ' + data.message);
+                            showError('Failed to update yt-dlp: ' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        loadingOverlay.classList.add('hidden');
+                        window.logDebug('ERROR: Failed to update yt-dlp: ' + error.message);
+                        showError('Failed to update yt-dlp: ' + error.message);
                     });
             };
             
