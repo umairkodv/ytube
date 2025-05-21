@@ -1,0 +1,112 @@
+[2025-05-19 01:12:41] Checking dependencies
+[2025-05-19 01:12:42] yt-dlp check result: 0
+[2025-05-19 01:12:43] ffmpeg check result: 0
+[2025-05-19 01:12:45] Getting video info for URL: https://www.youtube.com/shorts/EHDY1puoBqc
+[2025-05-19 01:12:45] Executing command: C:\Windows\yt-dlp\yt-dlp.exe -J --no-check-certificate --no-cache-dir --extractor-args "youtube:player_client=web" "https://www.youtube.com/shorts/EHDY1puoBqc" > "temp/info_988e199759cc36062ba8de37ad385469.json" 2>&1
+[2025-05-19 01:12:51] Command returned: 0
+[2025-05-19 01:12:51] Info file size: 407969 bytes
+[2025-05-19 01:12:51] Failed to parse video info JSON
+[2025-05-19 01:13:07] Getting video info for URL: https://www.youtube.com/shorts/0bVOo1z74dk
+[2025-05-19 01:13:07] Executing command: C:\Windows\yt-dlp\yt-dlp.exe -J --no-check-certificate --no-cache-dir --extractor-args "youtube:player_client=web" "https://www.youtube.com/shorts/0bVOo1z74dk" > "temp/info_854a94e0713c4375bb5ea88fee85eb78.json" 2>&1
+[2025-05-19 01:13:12] Command returned: 0
+[2025-05-19 01:13:12] Info file size: 17600 bytes
+[2025-05-19 01:13:12] Failed to parse video info JSON
+[2025-05-19 01:13:20] Getting video info for URL: https://www.youtube.com/watch?v=oEg_iXEWlt4
+[2025-05-19 01:13:20] Executing command: C:\Windows\yt-dlp\yt-dlp.exe -J --no-check-certificate --no-cache-dir "https://www.youtube.com/watch?v=oEg_iXEWlt4" > "temp/info_73bbbc115304ab02f9e1aefc84a355ea.json" 2>&1
+[2025-05-19 01:13:28] Command returned: 0
+[2025-05-19 01:13:28] Info file size: 504197 bytes
+[2025-05-19 01:13:28] Video info retrieved successfully
+[2025-05-19 01:13:33] Download request received for URL: https://www.youtube.com/watch?v=oEg_iXEWlt4, Format: low
+[2025-05-19 01:13:33] Starting direct download for URL: https://www.youtube.com/watch?v=oEg_iXEWlt4, Format: low
+[2025-05-19 01:13:33] Getting video info for URL: https://www.youtube.com/watch?v=oEg_iXEWlt4
+[2025-05-19 01:13:33] Executing command: C:\Windows\yt-dlp\yt-dlp.exe -J --no-check-certificate --no-cache-dir "https://www.youtube.com/watch?v=oEg_iXEWlt4" > "temp/info_28ec75df6ac5fd60f862a75fc4103d7d.json" 2>&1
+[2025-05-19 01:13:41] Command returned: 0
+[2025-05-19 01:13:41] Info file size: 504351 bytes
+[2025-05-19 01:13:41] Video info retrieved successfully
+[2025-05-19 01:13:41] Temp file: temp/download_682a69a5ac569.mp4
+[2025-05-19 01:13:41] Executing download command: C:\Windows\yt-dlp\yt-dlp.exe -f "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[height<=480]" --merge-output-format mp4 --no-check-certificate --no-cache-dir -o "temp/download_682a69a5ac569.mp4" "https://www.youtube.com/watch?v=oEg_iXEWlt4"
+[2025-05-19 01:13:59] Download command returned: 0
+[2025-05-19 01:13:59] Command output: [youtube] Extracting URL: https://www.youtube.com/watch?v=oEg_iXEWlt4
+[youtube] oEg_iXEWlt4: Downloading webpage
+[youtube] oEg_iXEWlt4: Downloading tv client config
+[youtube] oEg_iXEWlt4: Downloading player b2858d36-main
+[youtube] oEg_iXEWlt4: Downloading tv player API JSON
+[youtube] oEg_iXEWlt4: Downloading ios player API JSON
+[youtube] oEg_iXEWlt4: Downloading m3u8 information
+[info] oEg_iXEWlt4: Downloading 1 format(s): 397+140
+[download] Destination: temp\download_682a69a5ac569.f397.mp4
+[download]   0.0% of    4.81MiB at  Unknown B/s ETA Unknown[download]   0.1% of    4.81MiB at  Unknown B/s ETA Unknown[download]   0.1% of    4.81MiB at  Unknown B/s ETA Unknown[download]   0.3% of    4.81MiB at  Unknown B/s ETA Unknown[download]   0.6% of    4.81MiB at    3.75MiB/s ETA 00:01  [download]   1.3% of    4.81MiB at    3.61MiB/s ETA 00:01[download]   2.6% of    4.81MiB at    5.01MiB/s ETA 00:00[download]   5.2% of    4.81MiB at    6.99MiB/s ETA 00:00[download]  10.4% of    4.81MiB at    7.65MiB/s ETA 00:00[download]  20.8% of    4.81MiB at    1.55MiB/s ETA 00:02[download]  38.7% of    4.81MiB at  919.56KiB/s ETA 00:03[download]  51.2% of    4.81MiB at  971.06KiB/s ETA 00:02[download]  75.0% of    4.81MiB at  836.00KiB/s ETA 00:01[download]  88.1% of    4.81MiB at  964.35KiB/s ETA 00:00[download] 100.0% of    4.81MiB at  970.01KiB/s ETA 00:00[download] 100% of    4.81MiB in 00:00:05 at 960.46KiB/s 
+[download] Destination: temp\download_682a69a5ac569.f140.m4a
+[download]   0.0% of    4.32MiB at  136.27KiB/s ETA 00:32[download]   0.1% of    4.32MiB at  358.26KiB/s ETA 00:12[download]   0.2% of    4.32MiB at  835.95KiB/s ETA 00:05[download]   0.3% of    4.32MiB at    1.75MiB/s ETA 00:02[download]   0.7% of    4.32MiB at    3.20MiB/s ETA 00:01[download]   1.4% of    4.32MiB at    5.00MiB/s ETA 00:00[download]   2.9% of    4.32MiB at    5.02MiB/s ETA 00:00[download]   5.8% of    4.32MiB at    4.97MiB/s ETA 00:00[download]  11.6% of    4.32MiB at    1.35MiB/s ETA 00:02[download]  23.1% of    4.32MiB at    1.49MiB/s ETA 00:02[download]  46.3% of    4.32MiB at    1.10MiB/s ETA 00:02[download]  66.5% of    4.32MiB at    1.06MiB/s ETA 00:01[download]  89.2% of    4.32MiB at    1.04MiB/s ETA 00:00[download] 100.0% of    4.32MiB at    1.08MiB/s ETA 00:00[download] 100% of    4.32MiB in 00:00:04 at 1.02MiB/s   
+[Merger] Merging formats into "temp\download_682a69a5ac569.mp4"
+Deleting original file temp\download_682a69a5ac569.f140.m4a (pass -k to keep)
+Deleting original file temp\download_682a69a5ac569.f397.mp4 (pass -k to keep)
+
+[2025-05-19 01:13:59] Command error: 
+[2025-05-19 01:13:59] Download successful, preparing to serve file: 9624676 bytes
+[2025-05-19 01:13:59] Serving file: temp/download_682a69a5ac569.mp4 as Lyrical__Tu_Meri_Zindagi_Hai__Aashiqui__Anuradha_Paudwal_Kumar_Sanu_Rahul_Roy_Anu_Agarwal.mp4
+[2025-05-19 01:14:33] Getting video info for URL: https://www.youtube.com/shorts/9Fa7GUTIuu8
+[2025-05-19 01:14:33] Executing command: C:\Windows\yt-dlp\yt-dlp.exe -J --no-check-certificate --no-cache-dir --extractor-args "youtube:player_client=web" "https://www.youtube.com/shorts/9Fa7GUTIuu8" > "temp/info_eb33a2f445d98ea9f74c6dad01dd943f.json" 2>&1
+[2025-05-19 01:14:40] Command returned: 0
+[2025-05-19 01:14:40] Info file size: 414258 bytes
+[2025-05-19 01:14:40] Video info retrieved successfully
+[2025-05-19 01:14:43] Download request received for URL: https://www.youtube.com/shorts/9Fa7GUTIuu8, Format: medium
+[2025-05-19 01:14:43] Starting direct download for URL: https://www.youtube.com/shorts/9Fa7GUTIuu8, Format: medium
+[2025-05-19 01:14:43] Getting video info for URL: https://www.youtube.com/shorts/9Fa7GUTIuu8
+[2025-05-19 01:14:43] Executing command: C:\Windows\yt-dlp\yt-dlp.exe -J --no-check-certificate --no-cache-dir --extractor-args "youtube:player_client=web" "https://www.youtube.com/shorts/9Fa7GUTIuu8" > "temp/info_e9e19b1d9796922c324ce6d891167692.json" 2>&1
+[2025-05-19 01:14:49] Command returned: 0
+[2025-05-19 01:14:49] Info file size: 414311 bytes
+[2025-05-19 01:14:49] Video info retrieved successfully
+[2025-05-19 01:14:49] Temp file: temp/download_682a69e98758b.mp4
+[2025-05-19 01:14:49] Executing download command: C:\Windows\yt-dlp\yt-dlp.exe -f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]" --merge-output-format mp4 --no-check-certificate --no-cache-dir --extractor-args "youtube:player_client=web" -o "temp/download_682a69e98758b.mp4" "https://www.youtube.com/shorts/9Fa7GUTIuu8"
+[2025-05-19 01:15:02] Download command returned: 0
+[2025-05-19 01:15:02] Command output: [youtube] Extracting URL: https://www.youtube.com/shorts/9Fa7GUTIuu8
+[youtube] 9Fa7GUTIuu8: Downloading webpage
+[youtube] 9Fa7GUTIuu8: Downloading player b2858d36-main
+[info] 9Fa7GUTIuu8: Downloading 1 format(s): 18
+[download] Destination: temp\download_682a69e98758b.mp4
+[download]   0.0% of    2.56MiB at  286.24KiB/s ETA 00:09[download]   0.1% of    2.56MiB at  667.07KiB/s ETA 00:03[download]   0.3% of    2.56MiB at    1.52MiB/s ETA 00:01[download]   0.6% of    2.56MiB at    3.26MiB/s ETA 00:00[download]   1.2% of    2.56MiB at    1.02MiB/s ETA 00:02[download]   2.4% of    2.56MiB at    1.34MiB/s ETA 00:01[download]   4.9% of    2.56MiB at    1.71MiB/s ETA 00:01[download]   9.7% of    2.56MiB at    2.23MiB/s ETA 00:01[download]  19.5% of    2.56MiB at    3.46MiB/s ETA 00:00[download]  39.1% of    2.56MiB at  523.70KiB/s ETA 00:03[download]  49.9% of    2.56MiB at  649.09KiB/s ETA 00:02[download]  71.5% of    2.56MiB at  537.23KiB/s ETA 00:01[download]  86.2% of    2.56MiB at  522.33KiB/s ETA 00:00[download] 100.0% of    2.56MiB at  455.11KiB/s ETA 00:00[download] 100% of    2.56MiB in 00:00:06 at 411.81KiB/s 
+
+[2025-05-19 01:15:02] Command error: 
+[2025-05-19 01:15:02] Download successful, preparing to serve file: 2680615 bytes
+[2025-05-19 01:15:02] Serving file: temp/download_682a69e98758b.mp4 as tu_meri_zindagi_h__anuradhapaudwal_kumarsanu_bestofkumarsanu.mp4
+[2025-05-19 01:17:55] Checking dependencies
+[2025-05-19 01:17:56] yt-dlp check result: 0
+[2025-05-19 01:17:56] ffmpeg check result: 0
+[2025-05-19 01:18:00] Checking dependencies
+[2025-05-19 01:18:02] yt-dlp check result: 0
+[2025-05-19 01:18:02] ffmpeg check result: 0
+[2025-05-19 01:18:39] Getting video info for URL: https://www.youtube.com/watch?v=FkLFz2RzRhQ
+[2025-05-19 01:18:39] Executing command: C:\Windows\yt-dlp\yt-dlp.exe -J --no-check-certificate --no-cache-dir "https://www.youtube.com/watch?v=FkLFz2RzRhQ" > "temp/info_4252247bd238e01c90e7620ce1b49653.json" 2>&1
+[2025-05-19 01:18:47] Command returned: 0
+[2025-05-19 01:18:47] Info file size: 504758 bytes
+[2025-05-19 01:18:47] Video info retrieved successfully
+[2025-05-19 01:19:00] Download request received for URL: https://www.youtube.com/watch?v=FkLFz2RzRhQ, Format: low
+[2025-05-19 01:19:00] Starting direct download for URL: https://www.youtube.com/watch?v=FkLFz2RzRhQ, Format: low
+[2025-05-19 01:19:00] Getting video info for URL: https://www.youtube.com/watch?v=FkLFz2RzRhQ
+[2025-05-19 01:19:00] Executing command: C:\Windows\yt-dlp\yt-dlp.exe -J --no-check-certificate --no-cache-dir "https://www.youtube.com/watch?v=FkLFz2RzRhQ" > "temp/info_ce65d89fedf769abeee1499a83318579.json" 2>&1
+[2025-05-19 01:19:09] Command returned: 0
+[2025-05-19 01:19:09] Info file size: 506142 bytes
+[2025-05-19 01:19:09] Video info retrieved successfully
+[2025-05-19 01:19:09] Temp file: temp/download_682a6aed0d7d0.mp4
+[2025-05-19 01:19:09] Executing download command: C:\Windows\yt-dlp\yt-dlp.exe -f "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[height<=480]" --merge-output-format mp4 --no-check-certificate --no-cache-dir -o "temp/download_682a6aed0d7d0.mp4" "https://www.youtube.com/watch?v=FkLFz2RzRhQ"
+[2025-05-19 01:19:25] Download command returned: 0
+[2025-05-19 01:19:25] Command output: [youtube] Extracting URL: https://www.youtube.com/watch?v=FkLFz2RzRhQ
+[youtube] FkLFz2RzRhQ: Downloading webpage
+[youtube] FkLFz2RzRhQ: Downloading tv client config
+[youtube] FkLFz2RzRhQ: Downloading player b2858d36-main
+[youtube] FkLFz2RzRhQ: Downloading tv player API JSON
+[youtube] FkLFz2RzRhQ: Downloading ios player API JSON
+[youtube] FkLFz2RzRhQ: Downloading m3u8 information
+[info] FkLFz2RzRhQ: Downloading 1 format(s): 397+140
+[download] Destination: temp\download_682a6aed0d7d0.f397.mp4
+[download]   0.0% of    5.51MiB at  121.25KiB/s ETA 00:46[download]   0.1% of    5.51MiB at  363.74KiB/s ETA 00:15[download]   0.1% of    5.51MiB at  848.73KiB/s ETA 00:06[download]   0.3% of    5.51MiB at    1.78MiB/s ETA 00:03[download]   0.5% of    5.51MiB at    3.67MiB/s ETA 00:01[download]   1.1% of    5.51MiB at    7.46MiB/s ETA 00:00[download]   2.3% of    5.51MiB at    3.61MiB/s ETA 00:01[download]   4.5% of    5.51MiB at    4.94MiB/s ETA 00:01[download]   9.1% of    5.51MiB at    6.80MiB/s ETA 00:00[download]  18.1% of    5.51MiB at    2.23MiB/s ETA 00:02[download]  36.3% of    5.51MiB at    1.53MiB/s ETA 00:02[download]  57.5% of    5.51MiB at    1.41MiB/s ETA 00:01[download]  80.0% of    5.51MiB at    1.39MiB/s ETA 00:00[download] 100.0% of    5.51MiB at    1.18MiB/s ETA 00:00[download] 100% of    5.51MiB in 00:00:04 at 1.17MiB/s   
+[download] Destination: temp\download_682a6aed0d7d0.f140.m4a
+[download]   0.0% of    4.22MiB at  Unknown B/s ETA Unknown[download]   0.1% of    4.22MiB at  Unknown B/s ETA Unknown[download]   0.2% of    4.22MiB at  Unknown B/s ETA Unknown[download]   0.3% of    4.22MiB at  Unknown B/s ETA Unknown[download]   0.7% of    4.22MiB at    3.90MiB/s ETA 00:01  [download]   1.5% of    4.22MiB at    5.19MiB/s ETA 00:00[download]   2.9% of    4.22MiB at    1.58MiB/s ETA 00:02[download]   5.9% of    4.22MiB at    1.11MiB/s ETA 00:03[download]  11.8% of    4.22MiB at    1.70MiB/s ETA 00:02[download]  23.7% of    4.22MiB at    2.88MiB/s ETA 00:01[download]  47.4% of    4.22MiB at    1.74MiB/s ETA 00:01[download]  76.8% of    4.22MiB at    1.38MiB/s ETA 00:00[download] 100.0% of    4.22MiB at    1.38MiB/s ETA 00:00[download] 100% of    4.22MiB in 00:00:03 at 1.29MiB/s   
+[Merger] Merging formats into "temp\download_682a6aed0d7d0.mp4"
+Deleting original file temp\download_682a6aed0d7d0.f397.mp4 (pass -k to keep)
+Deleting original file temp\download_682a6aed0d7d0.f140.m4a (pass -k to keep)
+
+[2025-05-19 01:19:25] Command error: 
+[2025-05-19 01:19:25] Download successful, preparing to serve file: 10232771 bytes
+[2025-05-19 01:19:25] Serving file: temp/download_682a6aed0d7d0.mp4 as Sajjad_Ali_-_Har_Zulm_Official_Video.mp4

@@ -1,0 +1,25 @@
+# Protect directories
+<FilesMatch "^\.">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Protect sensitive files
+<FilesMatch "^(update-status\.php|install\.php)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Protect log directory
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^logs/ - [F,L]
+    RewriteRule ^temp/ - [F,L]
+</IfModule>
+
+# PHP settings
+php_flag display_errors off
+php_value max_execution_time 300
+php_value memory_limit 256M
+php_value post_max_size 8M
+php_value upload_max_filesize 8M

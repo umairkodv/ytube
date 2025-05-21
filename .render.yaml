@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: my-php-app
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    buildCommand: ""
+    startCommand: ""
+    region: oregon
