@@ -1,7 +1,7 @@
-# Start with the official PHP image
+# Start from official PHP 8.1 Apache image
 FROM php:8.1-apache
 
-# Install system dependencies
+# Install required system dependencies
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     python3 \
@@ -12,30 +12,33 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Verify Python and pip installation
+# Show Python and pip versions (for verification)
 RUN python3 --version && pip3 --version
 
-# Upgrade pip to latest version
-RUN pip3 install --upgrade pip
+# Upgrade pip (avoid externally-managed-environment error)
+RUN pip3 install --upgrade pip --break-system-packages
 
-# Install yt-dlp via pip
-RUN pip3 install yt-dlp
+# Install yt-dlp using pip
+RUN pip3 install yt-dlp --break-system-packages
 
-# Enable mod_rewrite for Apache
+# Verify yt-dlp installed correctly
+RUN yt-dlp --version
+
+# Enable Apache mod_rewrite
 RUN a2enmod rewrite
 
 # Set working directory
 WORKDIR /var/www/html
 
-# Copy project files
+# Copy all project files into container
 COPY . .
 
-# Ensure temp and logs directories exist and are writable
+# Create and set permissions for temp and logs folders
 RUN mkdir -p /var/www/html/temp /var/www/html/logs \
     && chmod -R 777 /var/www/html/temp /var/www/html/logs
 
-# Expose Apache port
+# Expose port 80 for HTTP
 EXPOSE 80
 
-# Start Apache server
+# Run Apache in foreground
 CMD ["apache2-foreground"]
