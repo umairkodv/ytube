@@ -227,7 +227,175 @@ function get_video_info($url, $config) {
     $is_youtube_shorts = (strpos($url, 'youtube.com/shorts') !== false);
     $is_tiktok = (strpos($url, 'tiktok.com') !== false);
     
-    // Basic command - simplified for troubleshooting
+    // YouTube-specific approach
+    if ($is_youtube) {
+        debug_log("Using YouTube-specific approach", $config);
+        
+        // First try: Use YouTube-specific options
+        $youtube_cmd = "$ytdlp_path --no-check-certificate --no-warnings --ignore-errors " .
+                      "--extractor-args \"youtube:player_client=android\" " .
+                      "--user-agent $user_agent_arg " .
+                      "--dump-json $escaped_url > \"$output_file\" 2>&1";
+        
+        debug_log("Executing YouTube command: $youtube_cmd", $config);
+        exec($youtube_cmd, $youtube_output, $youtube_return_var);
+        debug_log("YouTube command returned: $youtube_return_var", $config);
+        
+        // Check if the output file exists and has valid content
+        if (file_exists($output_file) && filesize($output_file) > 10) {
+            $info_content = file_get_contents($output_file);
+            
+            // Try to parse the JSON
+            $info = json_decode($info_content, true);
+            
+            if ($info) {
+                debug_log("Successfully parsed YouTube video info", $config);
+                
+                // Clean up the file
+                @unlink($output_file);
+                
+                // Sanitize filename for download
+                $title = $info['title'] ?? 'video';
+                $sanitized_title = preg_replace('/[^\w\s\-]/u', '', $title);
+                $sanitized_title = str_replace(' ', '_', $sanitized_title);
+                $sanitized_title = substr($sanitized_title, 0, 100);
+                if (empty($sanitized_title)) {
+                    $sanitized_title = 'video_' . time();
+                }
+                
+                return [
+                    'success' => true,
+                    'info' => [
+                        'title' => $title,
+                        'uploader' => $info['uploader'] ?? 'Unknown Uploader',
+                        'duration' => isset($info['duration']) ? gmdate("H:i:s", $info['duration']) : 'Unknown',
+                        'upload_date' => isset($info['upload_date']) ? 
+                            date("Y-m-d", strtotime($info['upload_date'])) : 'Unknown',
+                        'view_count' => $info['view_count'] ?? 'Unknown',
+                        'like_count' => $info['like_count'] ?? 'Unknown',
+                        'thumbnail' => $info['thumbnail'] ?? '',
+                        'sanitized_title' => $sanitized_title,
+                        'ext_id' => $info['id'] ?? md5($url),
+                        'is_shorts' => $is_youtube_shorts,
+                        'is_youtube' => $is_youtube,
+                        'is_tiktok' => $is_tiktok
+                    ]
+                ];
+            } else {
+                debug_log("Failed to parse YouTube JSON: " . json_last_error_msg(), $config, 'ERROR');
+                debug_log("Raw YouTube content: " . substr($info_content, 0, 500) . "...", $config, 'ERROR');
+            }
+        }
+        
+        // Second try: Use simpler approach with different options
+        debug_log("First YouTube approach failed, trying alternative method", $config);
+        
+        // Use a different format for YouTube
+        $alt_youtube_cmd = "$ytdlp_path --no-check-certificate --no-warnings --ignore-errors " .
+                          "--user-agent $user_agent_arg " .
+                          "--print-json $escaped_url > \"$output_file\" 2>&1";
+        
+        debug_log("Executing alternative YouTube command: $alt_youtube_cmd", $config);
+        exec($alt_youtube_cmd, $alt_output, $alt_return_var);
+        debug_log("Alternative YouTube command returned: $alt_return_var", $config);
+        
+        if (file_exists($output_file) && filesize($output_file) > 10) {
+            $info_content = file_get_contents($output_file);
+            
+            // Try to parse the JSON
+            $info = json_decode($info_content, true);
+            
+            if ($info) {
+                debug_log("Successfully parsed YouTube video info with alternative method", $config);
+                
+                // Clean up the file
+                @unlink($output_file);
+                
+                // Sanitize filename for download
+                $title = $info['title'] ?? 'video';
+                $sanitized_title = preg_replace('/[^\w\s\-]/u', '', $title);
+                $sanitized_title = str_replace(' ', '_', $sanitized_title);
+                $sanitized_title = substr($sanitized_title, 0, 100);
+                if (empty($sanitized_title)) {
+                    $sanitized_title = 'video_' . time();
+                }
+                
+                return [
+                    'success' => true,
+                    'info' => [
+                        'title' => $title,
+                        'uploader' => $info['uploader'] ?? 'Unknown Uploader',
+                        'duration' => isset($info['duration']) ? gmdate("H:i:s", $info['duration']) : 'Unknown',
+                        'upload_date' => isset($info['upload_date']) ? 
+                            date("Y-m-d", strtotime($info['upload_date'])) : 'Unknown',
+                        'view_count' => $info['view_count'] ?? 'Unknown',
+                        'like_count' => $info['like_count'] ?? 'Unknown',
+                        'thumbnail' => $info['thumbnail'] ?? '',
+                        'sanitized_title' => $sanitized_title,
+                        'ext_id' => $info['id'] ?? md5($url),
+                        'is_shorts' => $is_youtube_shorts,
+                        'is_youtube' => $is_youtube,
+                        'is_tiktok' => $is_tiktok
+                    ]
+                ];
+            } else {
+                debug_log("Failed to parse YouTube JSON with alternative method: " . json_last_error_msg(), $config, 'ERROR');
+                debug_log("Raw YouTube content: " . substr($info_content, 0, 500) . "...", $config, 'ERROR');
+            }
+        }
+        
+        // Third try: Use YouTube API to get basic info
+        debug_log("Both YouTube approaches failed, using fallback method", $config);
+        
+        // Extract video ID from URL
+        $video_id = '';
+        if (strpos($url, 'youtube.com/watch') !== false) {
+            parse_str(parse_url($url, PHP_URL_QUERY), $query_params);
+            $video_id = $query_params['v'] ?? '';
+        } else if (strpos($url, 'youtube.com/shorts/') !== false) {
+            $parts = explode('/', parse_url($url, PHP_URL_PATH));
+            $video_id = end($parts);
+        } else if (strpos($url, 'youtu.be/') !== false) {
+            $parts = explode('/', parse_url($url, PHP_URL_PATH));
+            $video_id = end($parts);
+        }
+        
+        if (!empty($video_id)) {
+            debug_log("Extracted YouTube video ID: $video_id", $config);
+            
+            // Create basic info manually
+            $title = "YouTube Video $video_id";
+            $sanitized_title = "YouTube_Video_$video_id";
+            $thumbnail = "https://i.ytimg.com/vi/$video_id/hqdefault.jpg";
+            
+            return [
+                'success' => true,
+                'info' => [
+                    'title' => $title,
+                    'uploader' => 'YouTube Creator',
+                    'duration' => 'Unknown',
+                    'upload_date' => date("Y-m-d"),
+                    'view_count' => 'Unknown',
+                    'like_count' => 'Unknown',
+                    'thumbnail' => $thumbnail,
+                    'sanitized_title' => $sanitized_title,
+                    'ext_id' => $video_id,
+                    'is_shorts' => $is_youtube_shorts,
+                    'is_youtube' => $is_youtube,
+                    'is_tiktok' => $is_tiktok
+                ]
+            ];
+        }
+        
+        // If all YouTube-specific approaches fail
+        debug_log("All YouTube approaches failed", $config, 'ERROR');
+        return [
+            'success' => false,
+            'message' => 'Failed to retrieve YouTube video information'
+        ];
+    }
+    
+    // TikTok and other platforms - use the working approach
     $cmd = "$ytdlp_path -J --no-check-certificate --no-warnings $escaped_url > \"$output_file\" 2>&1";
     
     // Log the command
@@ -338,16 +506,42 @@ function download_video($url, $format_key, $config) {
     $temp_file = $config['temp_dir'] . uniqid('download_') . '.' . $ext;
     debug_log("Temp file: $temp_file", $config);
     
-    // Build the command - simplified for troubleshooting
+    // Get a random user agent
+    $user_agent = get_random_user_agent($config);
+    $user_agent_arg = escapeshellarg($user_agent);
+    
+    // Build the command
     $ytdlp_path = $config['ytdlp_path'];
     $escaped_url = escapeshellarg($url);
     $ffmpeg_path = escapeshellarg($config['ffmpeg_path']);
     
-    // Basic download command
-    if ($audio_only) {
-        $cmd = "$ytdlp_path -f $format_str -x --audio-format $ext --audio-quality 0 --no-check-certificate --ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
-    } else {
-        $cmd = "$ytdlp_path -f $format_str --merge-output-format $ext --no-check-certificate --ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
+    // YouTube-specific download command
+    if ($is_youtube) {
+        debug_log("Using YouTube-specific download approach", $config);
+        
+        if ($audio_only) {
+            $cmd = "$ytdlp_path -f $format_str -x --audio-format $ext --audio-quality 0 " .
+                  "--no-check-certificate --no-warnings --ignore-errors " .
+                  "--extractor-args \"youtube:player_client=android\" " .
+                  "--user-agent $user_agent_arg " .
+                  "--ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
+        } else {
+            $cmd = "$ytdlp_path -f $format_str --merge-output-format $ext " .
+                  "--no-check-certificate --no-warnings --ignore-errors " .
+                  "--extractor-args \"youtube:player_client=android\" " .
+                  "--user-agent $user_agent_arg " .
+                  "--ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
+        }
+    } 
+    // TikTok and other platforms - use the working approach
+    else {
+        if ($audio_only) {
+            $cmd = "$ytdlp_path -f $format_str -x --audio-format $ext --audio-quality 0 " .
+                  "--no-check-certificate --ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
+        } else {
+            $cmd = "$ytdlp_path -f $format_str --merge-output-format $ext " .
+                  "--no-check-certificate --ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url";
+        }
     }
     
     // Log the command
@@ -365,7 +559,16 @@ function download_video($url, $format_key, $config) {
         
         // Try a simpler approach
         debug_log("Trying simpler download approach", $config);
-        $simple_cmd = "$ytdlp_path --no-check-certificate -o \"$temp_file\" $escaped_url";
+        
+        if ($is_youtube) {
+            // YouTube-specific fallback
+            $simple_cmd = "$ytdlp_path --no-check-certificate --no-warnings --ignore-errors " .
+                         "--user-agent $user_agent_arg " .
+                         "-o \"$temp_file\" $escaped_url";
+        } else {
+            $simple_cmd = "$ytdlp_path --no-check-certificate -o \"$temp_file\" $escaped_url";
+        }
+        
         debug_log("Executing simple download command: $simple_cmd", $config);
         exec($simple_cmd, $simple_output, $simple_return_var);
         debug_log("Simple download command returned: $simple_return_var", $config);
@@ -435,6 +638,47 @@ function serve_file($file_path, $file_name, $config) {
     // Delete the temporary file
     unlink($file_path);
     exit;
+}
+
+// Function to test directory permissions
+function test_permissions($config) {
+    $test_file = $config['temp_dir'] . 'test_' . uniqid() . '.txt';
+    $test_content = 'Permission test: ' . date('Y-m-d H:i:s');
+    
+    $write_success = @file_put_contents($test_file, $test_content);
+    
+    if ($write_success === false) {
+        return [
+            'success' => false,
+            'message' => 'Failed to write to temp directory'
+        ];
+    }
+    
+    $read_content = @file_get_contents($test_file);
+    @unlink($test_file);
+    
+    if ($read_content !== $test_content) {
+        return [
+            'success' => false,
+            'message' => 'Failed to read from temp directory'
+        ];
+    }
+    
+    $log_file = $config['log_dir'] . 'test_' . uniqid() . '.txt';
+    $log_success = @file_put_contents($log_file, $test_content);
+    @unlink($log_file);
+    
+    if ($log_success === false) {
+        return [
+            'success' => false,
+            'message' => 'Failed to write to log directory'
+        ];
+    }
+    
+    return [
+        'success' => true,
+        'message' => 'Directory permissions are correct'
+    ];
 }
 
 // Handle download request
@@ -526,6 +770,10 @@ if (isset($_GET['action'])) {
             $info = get_video_info($url, $config);
             $info['formats'] = $config['format_options'];
             echo json_encode($info);
+            break;
+            
+        case 'test_permissions':
+            echo json_encode(test_permissions($config));
             break;
             
         default:
@@ -1086,6 +1334,25 @@ $dependencies = check_dependencies($config);
         .test-button:hover {
             background-color: #3a7bc8;
         }
+        
+        /* Platform badges */
+        .platform-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            margin-left: 8px;
+            vertical-align: middle;
+            color: white;
+        }
+        
+        .youtube-badge {
+            background-color: #FF0000;
+        }
+        
+        .tiktok-badge {
+            background-color: #000000;
+        }
     </style>
 </head>
 <body>
@@ -1288,7 +1555,17 @@ $dependencies = check_dependencies($config);
                 urlInputSpinner.classList.remove('hidden');
                 
                 // Show full-screen loading overlay for fetching video info
-                updateLoadingText('Fetching video information...', 'Please wait while we analyze the video.');
+                const isYoutube = url.includes('youtube.com') || url.includes('youtu.be');
+                const isTiktok = url.includes('tiktok.com');
+                
+                if (isYoutube) {
+                    updateLoadingText('Fetching YouTube video information...', 'YouTube videos may take longer to process. Please be patient.');
+                } else if (isTiktok) {
+                    updateLoadingText('Fetching TikTok video information...', 'Please wait while we analyze the video.');
+                } else {
+                    updateLoadingText('Fetching video information...', 'Please wait while we analyze the video.');
+                }
+                
                 loadingOverlay.classList.remove('hidden');
                 
                 // Log to debug panel
@@ -1334,6 +1611,17 @@ $dependencies = check_dependencies($config);
                 const isYoutube = info.is_youtube || false;
                 const isTiktok = info.is_tiktok || false;
                 
+                // Create platform badge
+                let platformBadge = '';
+                if (isYoutube) {
+                    platformBadge = '<span class="platform-badge youtube-badge">YouTube</span>';
+                    if (isShorts) {
+                        platformBadge = '<span class="platform-badge youtube-badge">YouTube Shorts</span>';
+                    }
+                } else if (isTiktok) {
+                    platformBadge = '<span class="platform-badge tiktok-badge">TikTok</span>';
+                }
+                
                 // Display video info
                 videoInfoElement.innerHTML = `
                     <div class="video-thumbnail">
@@ -1342,7 +1630,7 @@ $dependencies = check_dependencies($config);
                     <div class="video-details">
                         <div class="video-title">
                             ${info.title}
-                            ${isShorts ? '<span class="shorts-badge">Shorts</span>' : ''}
+                            ${platformBadge}
                         </div>
                         <div class="video-meta">
                             <span><i class="fas fa-user"></i> ${info.uploader}</span>
@@ -1352,7 +1640,7 @@ $dependencies = check_dependencies($config);
                             <span><i class="fas fa-eye"></i> ${formatNumber(info.view_count)} views</span>
                             <span><i class="fas fa-thumbs-up"></i> ${formatNumber(info.like_count)} likes</span>
                         </div>
-                        ${isShorts ? '<div class="alert alert-info" style="margin-top: 10px;"><i class="fas fa-info-circle"></i> YouTube Shorts may take longer to download.</div>' : ''}
+                        ${isYoutube ? '<div class="alert alert-info" style="margin-top: 10px;"><i class="fas fa-info-circle"></i> YouTube videos may take longer to download due to anti-scraping measures.</div>' : ''}
                         ${isTiktok ? '<div class="alert alert-info" style="margin-top: 10px;"><i class="fas fa-info-circle"></i> TikTok videos may require multiple attempts to download.</div>' : ''}
                     </div>
                 `;
@@ -1410,7 +1698,17 @@ $dependencies = check_dependencies($config);
                 const downloadId = Date.now();
                 
                 // Show loading overlay with download message
-                updateLoadingText('Preparing your download...', 'This may take a moment. Please don\'t close this page.');
+                const isYoutube = url.includes('youtube.com') || url.includes('youtu.be');
+                const isTiktok = url.includes('tiktok.com');
+                
+                if (isYoutube) {
+                    updateLoadingText('Preparing YouTube download...', 'YouTube videos may take longer to process. Please be patient.');
+                } else if (isTiktok) {
+                    updateLoadingText('Preparing TikTok download...', 'Please wait while we process your download.');
+                } else {
+                    updateLoadingText('Preparing your download...', 'This may take a moment. Please don\'t close this page.');
+                }
+                
                 loadingOverlay.classList.remove('hidden');
                 
                 // Reset progress bar animation
@@ -1419,18 +1717,6 @@ $dependencies = check_dependencies($config);
                 setTimeout(() => {
                     progressBar.style.animation = 'progress 120s linear forwards';
                 }, 10);
-                
-                // Check if this is a YouTube Shorts URL
-                const isYoutubeShorts = url.includes('youtube.com/shorts') || (url.includes('youtu.be/') && url.length < 30);
-                if (isYoutubeShorts) {
-                    updateLoadingText('Preparing YouTube Shorts download...', 'Shorts may take longer to process. Please be patient.');
-                }
-                
-                // Check if this is a TikTok URL
-                const isTiktok = url.includes('tiktok.com');
-                if (isTiktok) {
-                    updateLoadingText('Preparing TikTok video download...', 'TikTok videos may require special processing. Please be patient.');
-                }
                 
                 // Log to debug panel
                 window.logDebug('Starting download: URL=' + url + ', Format=' + format);
@@ -1562,25 +1848,20 @@ $dependencies = check_dependencies($config);
                             // Test directory permissions
                             window.logDebug('Testing directory permissions...');
                             
-                            // Create a test file in temp directory
-                            const testData = new FormData();
-                            testData.append('test', 'test');
-                            
-                            fetch('?action=test_permissions', {
-                                method: 'POST',
-                                body: testData
-                            })
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    window.logDebug('Directory permissions: OK');
-                                } else {
-                                    window.logDebug('ERROR: Directory permissions issue: ' + data.message);
-                                }
-                            })
-                            .catch(error => {
-                                window.logDebug('ERROR: Failed to test directory permissions: ' + error.message);
-                            });
+                            fetch('?action=test_permissions')
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.success) {
+                                        window.logDebug('Directory permissions: OK');
+                                        showSuccess('Directory permissions are correct.');
+                                    } else {
+                                        window.logDebug('ERROR: Directory permissions issue: ' + data.message);
+                                        showError('Directory permissions issue: ' + data.message);
+                                    }
+                                })
+                                .catch(error => {
+                                    window.logDebug('ERROR: Failed to test directory permissions: ' + error.message);
+                                });
                         }
                     })
                     .catch(error => {
