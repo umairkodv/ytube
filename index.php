@@ -16,7 +16,7 @@ require_once('youtube-direct-bypass.php');
 require_once('proxy-config.php');
 
 // Include the updated download fix
-require_once('fix-download-updated.php');
+require_once('fix-download-updated-v2.php');
 
 // Set cache directory for yt-dlp
 $cache_dir = '/tmp/yt-dlp-cache/';
