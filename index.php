@@ -3,7 +3,9 @@
 // Include platform-specific functions
 require_once('platform-specific.php');
 
-require_once('fix-download.php');
+require_once('youtube-bypass.php');
+require_once('proxy-config.php');
+require_once('fix-download-updated.php');
 
 // Create cache directory with proper permissions
 $cache_dir = '/tmp/yt-dlp-cache/';
