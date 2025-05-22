@@ -1,228 +1,228 @@
 <?php
 // Error reporting for debugging (remove in production)
-ini_set('display_errors', 0); // Turn off error display for AJAX requests
-ini_set('display_startup_errors', 0);
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 // Start session for tracking downloads
 session_start();
 
-// Find the full path to ffmpeg
-$ffmpeg_path = trim(shell_exec('which ffmpeg'));
-if (empty($ffmpeg_path)) {
-    $ffmpeg_path = 'ffmpeg'; // Fallback to just the command name
-}
-
 // Configuration
 $config = [
-    'ytdlp_path' => '/usr/local/bin/yt-dlp', // Path to yt-dlp executable
-    'ffmpeg_path' => $ffmpeg_path, // Path to ffmpeg executable
-    'temp_dir' => '/tmp/', // Temporary directory for downloads
-    'log_dir' => '/tmp/', // Log directory (must be writable)
-    'debug' => true, // Enable debug logging
+    'temp_dir' => 'temp/',
+    'log_dir' => 'logs/',
+    'ytdlp_path' => 'yt-dlp', // Use system path
+    'ffmpeg_path' => 'ffmpeg', // Use system path
+    'max_execution_time' => 600, // 10 minutes
+    'download_timeout' => 180, // 3 minutes
+    'rate_limit' => [
+        'enabled' => true,
+        'max_per_ip' => 50,
+        'time_window' => 3600, // 1 hour
+    ],
+    'supported_sites' => [
+        'youtube.com', 'youtu.be',
+        'facebook.com', 'fb.watch',
+        'instagram.com',
+        'tiktok.com',
+        'twitter.com', 'x.com',
+        'vimeo.com',
+        'dailymotion.com',
+        'reddit.com',
+    ],
+    // Simplified format options
     'format_options' => [
         'best' => [
-            'label' => 'Best Quality',
-            'format' => 'bestvideo+bestaudio/best',
+            'label' => 'Best Quality (MP4)',
+            'format' => 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             'ext' => 'mp4'
         ],
         'medium' => [
-            'label' => 'Medium Quality (720p)',
-            'format' => 'bestvideo[height<=720]+bestaudio/best[height<=720]',
+            'label' => 'Medium Quality (MP4 720p)',
+            'format' => 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]',
             'ext' => 'mp4'
         ],
         'low' => [
-            'label' => 'Low Quality (480p)',
-            'format' => 'bestvideo[height<=480]+bestaudio/best[height<=480]',
+            'label' => 'Low Quality (MP4 480p)',
+            'format' => 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[height<=480]',
             'ext' => 'mp4'
         ],
         'audio' => [
             'label' => 'Audio Only (MP3)',
-            'format' => 'bestaudio',
+            'format' => 'bestaudio/best',
             'ext' => 'mp3',
             'audio_only' => true
         ]
     ],
-    'user_agents' => [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Safari/605.1.15",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:89.0) Gecko/20100101 Firefox/89.0",
-        "Mozilla/5.0 (iPad; CPU OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
-        "Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36",
-        "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36"
-    ],
-    'cookies_file' => 'cookies.txt', // Add this line near the top of the $config array
-    'proxy' => '', // Add this line - leave empty if no proxy is needed
-    'max_retries' => 3, // Maximum number of retry attempts
-    'sleep_interval' => 2, // Sleep interval between retries (seconds)
-    'youtube_options' => '--sleep-interval 2 --max-sleep-interval 5 --extractor-args "youtube:player_client=android" --geo-bypass',
+    // Debug mode
+    'debug' => true
 ];
 
-// Create necessary directories with proper permissions
+// Set max execution time
+ini_set('max_execution_time', $config['max_execution_time']);
+
+// Create necessary directories
 foreach ([$config['temp_dir'], $config['log_dir']] as $dir) {
     if (!file_exists($dir)) {
         mkdir($dir, 0755, true);
     }
 }
 
-// Create cache directory with proper permissions
-$cache_dir = '/tmp/yt-dlp-cache/';
-if (!file_exists($cache_dir)) {
-    mkdir($cache_dir, 0777, true);
-}
-putenv("XDG_CACHE_HOME={$cache_dir}");
-
-// Dependency check
-$dependencies = [
-    'ytdlp' => [
-        'installed' => file_exists($config['ytdlp_path']),
-        'path' => $config['ytdlp_path'],
-        'version' => ''
-    ],
-    'ffmpeg' => [
-        'installed' => file_exists($config['ffmpeg_path']),
-        'path' => $config['ffmpeg_path']
-    ]
-];
-
-// Get yt-dlp version
-if ($dependencies['ytdlp']['installed']) {
-    exec($config['ytdlp_path'] . ' --version 2>&1', $output, $return_var);
-    if ($return_var === 0 && isset($output[0])) {
-        $dependencies['ytdlp']['version'] = trim($output[0]);
-    }
-}
-
-// Helper function for debug logging
-function debug_log($message, $config, $level = 'INFO') {
+// Debug log function
+function debug_log($message, $config) {
     if ($config['debug']) {
+        $log_file = $config['log_dir'] . 'debug_log.txt';
         $timestamp = date('Y-m-d H:i:s');
-        error_log("[$timestamp] [$level] $message\n", 0);
+        file_put_contents($log_file, "[$timestamp] $message\n", FILE_APPEND);
     }
 }
 
-// Helper function to get a random user agent
-function get_random_user_agent($config) {
-    return $config['user_agents'][array_rand($config['user_agents'])];
+// Function to check if yt-dlp and ffmpeg are installed
+function check_dependencies($config) {
+    debug_log("Checking dependencies", $config);
+    $ytdlp_path = $config['ytdlp_path'];
+    $ffmpeg_path = $config['ffmpeg_path'];
+    
+    // Check yt-dlp
+    exec($ytdlp_path . ' --version 2>&1', $ytdlp_output, $ytdlp_return);
+    debug_log("yt-dlp check result: $ytdlp_return", $config);
+    
+    // Check ffmpeg
+    exec($ffmpeg_path . ' -version 2>&1', $ffmpeg_output, $ffmpeg_return);
+    debug_log("ffmpeg check result: $ffmpeg_return", $config);
+    
+    $result = [
+        'ytdlp' => [
+            'installed' => ($ytdlp_return === 0),
+            'version' => ($ytdlp_return === 0) ? $ytdlp_output[0] : 'Not installed'
+        ],
+        'ffmpeg' => [
+            'installed' => ($ffmpeg_return === 0),
+            'version' => ($ffmpeg_return === 0) ? (isset($ffmpeg_output[0]) ? $ffmpeg_output[0] : 'Installed') : 'Not installed'
+        ]
+    ];
+    
+    return $result;
 }
 
-// Sanitize file name
-function sanitize_filename($filename) {
-    $filename = preg_replace('/[^\w\s\-\.]/u', '', $filename);
-    $filename = trim($filename, '.-_ ');
-    $filename = preg_replace('/\s+/u', '_', $filename);
-    return $filename;
+// Function to sanitize URL
+function sanitize_url($url) {
+    return filter_var($url, FILTER_SANITIZE_URL);
 }
 
-// Function to get video info with enhanced error handling
+// Function to validate URL
+function validate_url($url, $config) {
+    if (empty($url)) {
+        return false;
+    }
+    
+    $url = filter_var($url, FILTER_VALIDATE_URL);
+    if (!$url) {
+        return false;
+    }
+    
+    $host = parse_url($url, PHP_URL_HOST);
+    if (!$host) {
+        return false;
+    }
+    
+    // Check if the domain is in our supported sites list
+    foreach ($config['supported_sites'] as $site) {
+        if (strpos($host, $site) !== false) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+// Function to check rate limit
+function check_rate_limit($config) {
+    if (!$config['rate_limit']['enabled']) {
+        return true;
+    }
+    
+    $ip = $_SERVER['REMOTE_ADDR'];
+    $current_time = time();
+    $log_file = $config['log_dir'] . 'rate_limit.json';
+    
+    // Initialize or load rate limit data
+    if (file_exists($log_file)) {
+        $rate_data = json_decode(file_get_contents($log_file), true);
+    } else {
+        $rate_data = [];
+    }
+    
+    // Clean up old entries
+    foreach ($rate_data as $check_ip => $times) {
+        foreach ($times as $key => $time) {
+            if ($current_time - $time > $config['rate_limit']['time_window']) {
+                unset($rate_data[$check_ip][$key]);
+            }
+        }
+        if (empty($rate_data[$check_ip])) {
+            unset($rate_data[$check_ip]);
+        }
+    }
+    
+    // Check current IP
+    if (!isset($rate_data[$ip])) {
+        $rate_data[$ip] = [$current_time];
+    } else {
+        // Check if limit exceeded
+        if (count($rate_data[$ip]) >= $config['rate_limit']['max_per_ip']) {
+            return false;
+        }
+        $rate_data[$ip][] = $current_time;
+    }
+    
+    // Save updated rate data
+    file_put_contents($log_file, json_encode($rate_data));
+    return true;
+}
+
+// Function to get video info
 function get_video_info($url, $config) {
     debug_log("Getting video info for URL: $url", $config);
     $ytdlp_path = $config['ytdlp_path'];
-    $escaped_url = escapeshellarg($url);
+    $url = escapeshellarg($url);
     $output_file = $config['temp_dir'] . 'info_' . md5(uniqid() . $url) . '.json';
-    $error_log = $config['log_dir'] . 'info_error_' . uniqid() . '.log';
-
-    // Get a random user agent
-    $user_agent = get_random_user_agent($config);
-    $user_agent_arg = escapeshellarg($user_agent);
-
-    // Use cookies file if it exists
-    $cookies_arg = '';
-    if (!empty($config['cookies_file']) && file_exists($config['cookies_file'])) {
-        $cookies_arg = '--cookies ' . escapeshellarg($config['cookies_file']);
-        debug_log("Using cookies file: {$config['cookies_file']}", $config);
+    
+    // Check if this is a YouTube Shorts URL
+    $is_youtube_shorts = (strpos($url, 'youtube.com/shorts') !== false || strpos($url, 'youtu.be/') !== false);
+    
+    // Get basic info
+    if ($is_youtube_shorts) {
+        $cmd = $ytdlp_path . ' -J --no-check-certificate --no-cache-dir --extractor-args "youtube:player_client=web" ' . $url . ' > "' . $output_file . '" 2>&1';
+    } else {
+        $cmd = $ytdlp_path . ' -J --no-check-certificate --no-cache-dir ' . $url . ' > "' . $output_file . '" 2>&1';
     }
     
-    // Use proxy if configured
-    $proxy_arg = '';
-    if (!empty($config['proxy'])) {
-        $proxy_arg = '--proxy ' . escapeshellarg($config['proxy']);
-        debug_log("Using proxy: {$config['proxy']}", $config);
-    }
-
-    // Determine platform-specific options
-    $is_youtube = (strpos($url, 'youtube.com') !== false || strpos($url, 'youtu.be') !== false);
-    $is_youtube_shorts = (strpos($url, 'youtube.com/shorts') !== false);
-    $is_tiktok = (strpos($url, 'tiktok.com') !== false);
-    $is_instagram = (strpos($url, 'instagram.com') !== false);
-    $is_facebook = (strpos($url, 'facebook.com') !== false || strpos($url, 'fb.watch') !== false);
-
-    // TikTok and other platforms - use the working approach
-    $cmd = "$ytdlp_path -J --no-check-certificate --no-warnings $cookies_arg $proxy_arg $escaped_url > \"$output_file\" 2>\"$error_log\"";
-
-    // For YouTube, use specific options
-    if ($is_youtube) {
-        $cmd = "$ytdlp_path -J --no-check-certificate --no-warnings {$config['youtube_options']} $cookies_arg $proxy_arg $escaped_url > \"$output_file\" 2>\"$error_log\"";
-    }
-
-    // Log the command
-    debug_log("Executing info command: $cmd", $config);
-
-    // Execute the command
+    debug_log("Executing command: $cmd", $config);
     exec($cmd, $output, $return_var);
-
-    // Log the result
-    debug_log("Info command returned: $return_var", $config);
-
-    // Check if the output file exists and has content
-    if (!file_exists($output_file) || filesize($output_file) < 10) {
-        debug_log("Info file not created or empty. Return code: $return_var", $config, 'ERROR');
-        
-        // Log error if available
-        if (file_exists($error_log)) {
-            $error_content = file_get_contents($error_log);
-            debug_log("Info error: " . $error_content, $config, 'ERROR');
-        }
-        
-        // Try a simpler approach
-        debug_log("Trying simpler approach", $config);
-        $simple_cmd = "$ytdlp_path --dump-json --skip-download $cookies_arg $proxy_arg $escaped_url > \"$output_file\" 2>\"$error_log\"";
-        debug_log("Executing simple command: $simple_cmd", $config);
-        exec($simple_cmd, $simple_output, $simple_return_var);
-        debug_log("Simple command returned: $simple_return_var", $config);
-        
-        if (!file_exists($output_file) || filesize($output_file) < 10) {
-            debug_log("Simple approach failed. Return code: $simple_return_var", $config, 'ERROR');
-            
-            // Log error if available
-            if (file_exists($error_log)) {
-                $error_content = file_get_contents($error_log);
-                debug_log("Simple info error: " . $error_content, $config, 'ERROR');
-            }
-            
-            // Clean up the files
-            @unlink($output_file);
-            @unlink($error_log);
-            
-            return [
-                'success' => false,
-                'message' => 'Failed to retrieve video information'
-            ];
-        }
+    debug_log("Command returned: $return_var", $config);
+    
+    if ($return_var !== 0 || !file_exists($output_file)) {
+        debug_log("Failed to get video info. Output: " . implode("\n", $output), $config);
+        return [
+            'success' => false,
+            'message' => 'Failed to retrieve video information'
+        ];
     }
-
-    // Read and parse the JSON file
+    
     $info_content = file_get_contents($output_file);
     debug_log("Info file size: " . strlen($info_content) . " bytes", $config);
-
-    // Clean up the files
-    @unlink($output_file);
-    @unlink($error_log);
-
-    // Parse JSON
     $info = json_decode($info_content, true);
-
+    unlink($output_file);
+    
     if (!$info) {
-        debug_log("Failed to parse video info JSON: " . json_last_error_msg(), $config, 'ERROR');
-        debug_log("Raw content: " . substr($info_content, 0, 500) . "...", $config, 'ERROR');
+        debug_log("Failed to parse video info JSON", $config);
         return [
             'success' => false,
             'message' => 'Failed to parse video information'
         ];
     }
-
+    
     // Sanitize filename for download
     $title = $info['title'] ?? 'video';
     $sanitized_title = preg_replace('/[^\w\s\-]/u', '', $title);
@@ -231,32 +231,7 @@ function get_video_info($url, $config) {
     if (empty($sanitized_title)) {
         $sanitized_title = 'video_' . time();
     }
-
-    // Prepare formats for the frontend
-    $formats = [
-        'best' => [
-            'label' => 'Best Quality',
-            'format' => 'bestvideo+bestaudio/best',
-            'ext' => 'mp4'
-        ],
-        'medium' => [
-            'label' => 'Medium Quality (720p)',
-            'format' => 'bestvideo[height<=720]+bestaudio/best[height<=720]',
-            'ext' => 'mp4'
-        ],
-        'low' => [
-            'label' => 'Low Quality (480p)',
-            'format' => 'bestvideo[height<=480]+bestaudio/best[height<=480]',
-            'ext' => 'mp4'
-        ],
-        'audio' => [
-            'label' => 'Audio Only (MP3)',
-            'format' => 'bestaudio',
-            'ext' => 'mp3',
-            'audio_only' => true
-        ]
-    ];
-
+    
     debug_log("Video info retrieved successfully", $config);
     return [
         'success' => true,
@@ -271,165 +246,159 @@ function get_video_info($url, $config) {
             'thumbnail' => $info['thumbnail'] ?? '',
             'sanitized_title' => $sanitized_title,
             'ext_id' => $info['id'] ?? md5($url),
-            'is_shorts' => $is_youtube_shorts,
-            'is_youtube' => $is_youtube,
-            'is_tiktok' => $is_tiktok,
-            'is_instagram' => $is_instagram,
-            'is_facebook' => $is_facebook
-        ],
-        'formats' => $formats
+            'is_shorts' => $is_youtube_shorts
+        ]
     ];
 }
 
-// Function to download video directly with enhanced error handling
+// Function to download video directly (no iframe)
 function download_video($url, $format_key, $config) {
     debug_log("Starting direct download for URL: $url, Format: $format_key", $config);
-
+    
     // Get video info to get the title
     $video_info = get_video_info($url, $config);
-
+    
     if (!$video_info['success']) {
-        debug_log("Failed to get video info for download", $config, 'ERROR');
-        header('Content-Type: application/json');
+        debug_log("Failed to get video info for download", $config);
+        header('HTTP/1.0 400 Bad Request');
         echo json_encode([
             'success' => false,
             'message' => 'Failed to get video information'
         ]);
         exit;
     }
-
+    
     $info = $video_info['info'];
     $title = $info['sanitized_title'];
     $format = $config['format_options'][$format_key];
     $ext = $format['ext'];
     $format_str = $format['format'];
     $audio_only = isset($format['audio_only']) && $format['audio_only'];
-    $is_youtube = $info['is_youtube'] ?? false;
-    $is_tiktok = $info['is_tiktok'] ?? false;
-    $is_instagram = strpos($url, 'instagram.com') !== false;
-    $is_facebook = strpos($url, 'facebook.com') !== false || strpos($url, 'fb.watch') !== false;
-
-    // Create a temporary file with unique name
+    $is_shorts = $info['is_shorts'] ?? false;
+    
+    // Create a temporary file
     $temp_file = $config['temp_dir'] . uniqid('download_') . '.' . $ext;
-    $error_log = $config['log_dir'] . 'download_error_' . uniqid() . '.log';
     debug_log("Temp file: $temp_file", $config);
-    debug_log("Error log: $error_log", $config);
-
-    // Get a random user agent
-    $user_agent = get_random_user_agent($config);
-    $user_agent_arg = escapeshellarg($user_agent);
-
+    
     // Build the command
     $ytdlp_path = $config['ytdlp_path'];
-    $escaped_url = escapeshellarg($url);
-    $ffmpeg_path = escapeshellarg($config['ffmpeg_path']);
-    $cookies_arg = '';
+    $url = escapeshellarg($url);
     
-    // Use cookies file if it exists
-    if (!empty($config['cookies_file']) && file_exists($config['cookies_file'])) {
-        $cookies_arg = '--cookies ' . escapeshellarg($config['cookies_file']);
-        debug_log("Using cookies file: {$config['cookies_file']}", $config);
-    }
-    
-    // Use proxy if configured
-    $proxy_arg = '';
-    if (!empty($config['proxy'])) {
-        $proxy_arg = '--proxy ' . escapeshellarg($config['proxy']);
-        debug_log("Using proxy: {$config['proxy']}", $config);
-    }
-
-    // TikTok and other platforms - use the working approach
+    // Command to download to a temporary file
     if ($audio_only) {
-        $cmd = "$ytdlp_path -f $format_str -x --audio-format $ext --audio-quality 0 " .
-              "--no-check-certificate $cookies_arg $proxy_arg " .
-              "--ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url 2>\"$error_log\"";
+        $cmd = $ytdlp_path . ' -f ' . escapeshellarg($format_str) . ' -x --audio-format ' . $ext . ' --audio-quality 0 --no-check-certificate --no-cache-dir -o "' . $temp_file . '" ' . $url;
     } else {
-        $cmd = "$ytdlp_path -f $format_str --merge-output-format $ext " .
-              "--no-check-certificate $cookies_arg $proxy_arg " .
-              "--ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url 2>\"$error_log\"";
-    }
-
-    // For YouTube, use specific options
-    if ($is_youtube) {
-        if ($audio_only) {
-            $cmd = "$ytdlp_path -f $format_str -x --audio-format $ext --audio-quality 0 " .
-                  "--no-check-certificate --no-warnings --ignore-errors " .
-                  "{$config['youtube_options']} " .
-                  "--user-agent $user_agent_arg $cookies_arg $proxy_arg " .
-                  "--ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url 2>\"$error_log\"";
+        if ($is_shorts) {
+            // Special handling for YouTube Shorts
+            $cmd = $ytdlp_path . ' -f ' . escapeshellarg($format_str) . ' --merge-output-format ' . $ext . ' --no-check-certificate --no-cache-dir --extractor-args "youtube:player_client=web" -o "' . $temp_file . '" ' . $url;
         } else {
-            $cmd = "$ytdlp_path -f $format_str --merge-output-format $ext " .
-                  "--no-check-certificate --no-warnings --ignore-errors " .
-                  "{$config['youtube_options']} " .
-                  "--user-agent $user_agent_arg $cookies_arg $proxy_arg " .
-                  "--ffmpeg-location $ffmpeg_path -o \"$temp_file\" $escaped_url 2>\"$error_log\"";
+            $cmd = $ytdlp_path . ' -f ' . escapeshellarg($format_str) . ' --merge-output-format ' . $ext . ' --no-check-certificate --no-cache-dir -o "' . $temp_file . '" ' . $url;
         }
     }
-
+    
     // Log the command
     debug_log("Executing download command: $cmd", $config);
-
-    // Execute the command
-    exec($cmd, $output, $return_var);
-
-    // Log the result
-    debug_log("Download command returned: $return_var", $config);
-
-    // Check if the file exists and has content
-    if ($return_var !== 0 || !file_exists($temp_file) || filesize($temp_file) < 1000) { // File should be at least 1KB
-        debug_log("Download failed or file too small. Return code: $return_var", $config, 'ERROR');
+    
+    // Set a timeout for the command execution
+    $descriptorspec = [
+        0 => ["pipe", "r"],  // stdin
+        1 => ["pipe", "w"],  // stdout
+        2 => ["pipe", "w"]   // stderr
+    ];
+    
+    $process = proc_open($cmd, $descriptorspec, $pipes);
+    
+    if (is_resource($process)) {
+        // Set pipes to non-blocking mode
+        stream_set_blocking($pipes[1], 0);
+        stream_set_blocking($pipes[2], 0);
         
-        // Log error if available
-        if (file_exists($error_log)) {
-            $error_content = file_get_contents($error_log);
-            debug_log("Download error: " . $error_content, $config, 'ERROR');
+        $output = '';
+        $error = '';
+        $start_time = time();
+        
+        // Check process status with timeout
+        while (true) {
+            $status = proc_get_status($process);
+            
+            // Read from stdout and stderr
+            $output .= stream_get_contents($pipes[1]);
+            $error .= stream_get_contents($pipes[2]);
+            
+            // Check if process has ended
+            if (!$status['running']) {
+                break;
+            }
+            
+            // Check for timeout
+            if (time() - $start_time > $config['download_timeout']) {
+                debug_log("Download process timed out after {$config['download_timeout']} seconds", $config);
+                proc_terminate($process);
+                
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Download process timed out. Try a different format or video.'
+                ]);
+                exit;
+            }
+            
+            // Sleep briefly to prevent CPU hogging
+            usleep(100000); // 0.1 seconds
         }
         
-        // Try a simpler approach
-        debug_log("Trying simpler download approach", $config);
+        // Close pipes
+        fclose($pipes[0]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
         
-        $simple_cmd = "$ytdlp_path --no-check-certificate $cookies_arg $proxy_arg " .
-                     "-o \"$temp_file\" $escaped_url 2>\"$error_log\"";
-        
-        debug_log("Executing simple download command: $simple_cmd", $config);
-        exec($simple_cmd, $simple_output, $simple_return_var);
-        debug_log("Simple download command returned: $simple_return_var", $config);
-        
-        if ($simple_return_var !== 0 || !file_exists($temp_file) || filesize($temp_file) < 1000) {
-            debug_log("Simple download approach failed. Return code: $simple_return_var", $config, 'ERROR');
-            
-            // Log error if available
-            if (file_exists($error_log)) {
-                $error_content = file_get_contents($error_log);
-                debug_log("Simple download error: " . $error_content, $config, 'ERROR');
-            }
-            
-            header('Content-Type: application/json');
-            echo json_encode([
-                'success' => false,
-                'message' => 'Failed to download video'
-            ]);
-            
-            // Clean up
-            if (file_exists($temp_file)) {
-                unlink($temp_file);
-            }
-            if (file_exists($error_log)) {
-                unlink($error_log);
-            }
-            
-            exit;
-        }
+        // Close process
+        $return_var = proc_close($process);
+    } else {
+        debug_log("Failed to start download process", $config);
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => false,
+            'message' => 'Failed to start download process'
+        ]);
+        exit;
     }
-
+    
+    debug_log("Download command returned: $return_var", $config);
+    debug_log("Command output: $output", $config);
+    debug_log("Command error: $error", $config);
+    
+    if ($return_var !== 0 || !file_exists($temp_file) || filesize($temp_file) < 1000) { // File should be at least 1KB
+        debug_log("Download failed or file too small", $config);
+        header('Content-Type: application/json');
+        
+        $error_message = 'Failed to download video';
+        
+        // Check for common errors
+        if (strpos($error, 'This video is unavailable') !== false) {
+            $error_message = 'This video is unavailable or restricted';
+        } else if (strpos($error, 'Sign in to confirm your age') !== false) {
+            $error_message = 'Age-restricted video requires sign-in';
+        } else if (strpos($error, 'ERROR: Unable to extract') !== false) {
+            $error_message = 'Unable to extract video data. Format may not be supported';
+        }
+        
+        echo json_encode([
+            'success' => false,
+            'message' => $error_message
+        ]);
+        
+        // Clean up
+        if (file_exists($temp_file)) {
+            unlink($temp_file);
+        }
+        
+        exit;
+    }
+    
     // File exists and has content, prepare for download
     debug_log("Download successful, preparing to serve file: " . filesize($temp_file) . " bytes", $config);
-
-    // Clean up error log if it exists
-    if (file_exists($error_log)) {
-        unlink($error_log);
-    }
-
+    
     // Return success with file info
     header('Content-Type: application/json');
     echo json_encode([
@@ -446,14 +415,14 @@ function download_video($url, $format_key, $config) {
 // Function to serve a downloaded file
 function serve_file($file_path, $file_name, $config) {
     debug_log("Serving file: $file_path as $file_name", $config);
-
+    
     if (!file_exists($file_path)) {
-        debug_log("File not found: $file_path", $config, 'ERROR');
+        debug_log("File not found: $file_path", $config);
         header('HTTP/1.0 404 Not Found');
         echo 'File not found';
         exit;
     }
-
+    
     // Set headers for download
     header('Content-Description: File Transfer');
     header('Content-Type: application/octet-stream');
@@ -462,172 +431,119 @@ function serve_file($file_path, $file_name, $config) {
     header('Cache-Control: must-revalidate');
     header('Pragma: public');
     header('Content-Length: ' . filesize($file_path));
-
+    
     // Clear output buffer to ensure headers are sent
-    if (ob_get_level()) {
-        ob_end_clean();
-    }
+    ob_clean();
     flush();
-
+    
     // Read the file and output it to the browser
     readfile($file_path);
-
+    
     // Delete the temporary file
     unlink($file_path);
     exit;
 }
 
-// Function to test directory permissions
-function test_permissions($config) {
-    $test_file = $config['temp_dir'] . 'test_' . uniqid() . '.txt';
-    $test_content = 'Permission test: ' . date('Y-m-d H:i:s');
-
-    $write_success = @file_put_contents($test_file, $test_content);
-
-    if ($write_success === false) {
-        return [
+// Handle download request
+if (isset($_GET['download']) && isset($_GET['url']) && isset($_GET['format'])) {
+    $url = sanitize_url($_GET['url']);
+    $format = $_GET['format'];
+    
+    debug_log("Download request received for URL: $url, Format: $format", $config);
+    
+    if (!validate_url($url, $config)) {
+        debug_log("Invalid URL: $url", $config);
+        header('Content-Type: application/json');
+        echo json_encode([
             'success' => false,
-            'message' => 'Failed to write to temp directory'
-        ];
+            'message' => 'Invalid or unsupported URL'
+        ]);
+        exit;
     }
-
-    $read_content = @file_get_contents($test_file);
-    @unlink($test_file);
-
-    if ($read_content !== $test_content) {
-        return [
+    
+    if (!isset($config['format_options'][$format])) {
+        debug_log("Invalid format: $format", $config);
+        header('Content-Type: application/json');
+        echo json_encode([
             'success' => false,
-            'message' => 'Failed to read from temp directory'
-        ];
+            'message' => 'Invalid format'
+        ]);
+        exit;
     }
-
-    $log_file = $config['log_dir'] . 'test_' . uniqid() . '.txt';
-    $log_success = @file_put_contents($log_file, $test_content);
-    @unlink($log_file);
-
-    if ($log_success === false) {
-        return [
+    
+    if (!check_rate_limit($config)) {
+        debug_log("Rate limit exceeded for IP: " . $_SERVER['REMOTE_ADDR'], $config);
+        header('Content-Type: application/json');
+        echo json_encode([
             'success' => false,
-            'message' => 'Failed to write to log directory'
-        ];
+            'message' => 'Rate limit exceeded. Please try again later.'
+        ]);
+        exit;
     }
-
-    return [
-        'success' => true,
-        'message' => 'Directory permissions are correct'
-    ];
+    
+    // Download the video
+    download_video($url, $format, $config);
+    exit;
 }
 
-// Function to update yt-dlp
-function update_ytdlp($config) {
-    debug_log("Updating yt-dlp", $config);
-    $ytdlp_path = $config['ytdlp_path'];
-    $output_file = $config['log_dir'] . 'update_' . uniqid() . '.log';
+// Handle file serving request
+if (isset($_GET['serve']) && isset($_GET['file']) && isset($_GET['name'])) {
+    $file_path = $_GET['file'];
+    $file_name = $_GET['name'];
     
-    // Build the command
-    $cmd = "$ytdlp_path -U > \"$output_file\" 2>&1";
-    
-    // Log the command
-    debug_log("Executing update command: $cmd", $config);
-    
-    // Execute the command
-    exec($cmd, $output, $return_var);
-    
-    // Log the result
-    debug_log("Update command returned: $return_var", $config);
-    
-    // Read the output
-    $update_output = '';
-    if (file_exists($output_file)) {
-        $update_output = file_get_contents($output_file);
-        debug_log("Update output: " . $update_output, $config);
-        @unlink($output_file);
+    // Security check - make sure the file is in our temp directory
+    if (strpos($file_path, $config['temp_dir']) !== 0) {
+        debug_log("Security violation: Attempted to access file outside temp directory", $config);
+        header('HTTP/1.0 403 Forbidden');
+        echo 'Access denied';
+        exit;
     }
     
-    if ($return_var === 0) {
-        return [
-            'success' => true,
-            'message' => 'yt-dlp updated successfully: ' . trim($update_output)
-        ];
-    } else {
-        return [
-            'success' => false,
-            'message' => 'Failed to update yt-dlp: ' . trim($update_output)
-        ];
-    }
+    serve_file($file_path, $file_name, $config);
+    exit;
 }
 
-// AJAX request handling - THIS IS THE CRITICAL PART
+// Handle AJAX requests
 if (isset($_GET['action'])) {
-    // Ensure we're sending JSON response
     header('Content-Type: application/json');
     
-    try {
-        switch ($_GET['action']) {
-            case 'get_info':
-                $url = $_POST['url'] ?? '';
-                if (empty($url)) {
-                    echo json_encode(['success' => false, 'message' => 'URL is required']);
-                } else {
-                    $result = get_video_info($url, $config);
-                    echo json_encode($result);
-                }
+    switch ($_GET['action']) {
+        case 'check_dependencies':
+            echo json_encode(check_dependencies($config));
+            break;
+            
+        case 'get_info':
+            if (!isset($_POST['url'])) {
+                echo json_encode(['success' => false, 'message' => 'URL is required']);
                 break;
-            case 'check_dependencies':
-                echo json_encode($dependencies);
+            }
+            
+            $url = sanitize_url($_POST['url']);
+            
+            if (!validate_url($url, $config)) {
+                echo json_encode(['success' => false, 'message' => 'Invalid or unsupported URL']);
                 break;
-            case 'test_permissions':
-                echo json_encode(test_permissions($config));
+            }
+            
+            if (!check_rate_limit($config)) {
+                echo json_encode(['success' => false, 'message' => 'Rate limit exceeded. Please try again later.']);
                 break;
-            case 'update_ytdlp':
-                echo json_encode(update_ytdlp($config));
-                break;
-            default:
-                echo json_encode(['success' => false, 'message' => 'Invalid action']);
-        }
-    } catch (Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
+            }
+            
+            $info = get_video_info($url, $config);
+            $info['formats'] = $config['format_options'];
+            echo json_encode($info);
+            break;
+            
+        default:
+            echo json_encode(['success' => false, 'message' => 'Invalid action']);
     }
+    
     exit;
 }
 
-// Download request handling
-if (isset($_GET['download'])) {
-    try {
-        $url = $_GET['url'] ?? '';
-        $format = $_GET['format'] ?? 'best';
-        if (empty($url)) {
-            header('Content-Type: application/json');
-            echo json_encode(['success' => false, 'message' => 'URL is required']);
-        } else {
-            download_video($url, $format, $config);
-        }
-    } catch (Exception $e) {
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
-    }
-    exit;
-}
-
-// Serve file request handling
-if (isset($_GET['serve'])) {
-    try {
-        $file = $_GET['file'] ?? '';
-        $name = $_GET['name'] ?? 'downloaded_video.mp4';
-        if (empty($file) || !file_exists($file)) {
-            header('HTTP/1.0 404 Not Found');
-            echo "File not found";
-        } else {
-            serve_file($file, $name, $config);
-        }
-    } catch (Exception $e) {
-        header('HTTP/1.0 500 Internal Server Error');
-        echo "Error: " . $e->getMessage();
-    }
-    exit;
-}
-
-// Only render the HTML if this is not an AJAX request
+// Check dependencies
+$dependencies = check_dependencies($config);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -635,52 +551,56 @@ if (isset($_GET['serve'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Direct Video Downloader</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" integrity="sha512-9usAa10IRO0HhonpyAIVpjrylPvoDwiPUiKdWk5t3PyolY1cOd4DSE0Ga+ri4AuTroPR5aQvXU9xC6qOPnzFeg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
             --primary-color: #4361ee;
-            --secondary-color: #68b4a7;
-            --dark-color: #1e293b;
-            --gray-color: #64748b;
-            --info-color: #3b82f6;
-            --success-color: #16a34a;
-            --warning-color: #eab308;
-            --danger-color: #dc2626;
+            --secondary-color: #3f37c9;
+            --success-color: #4cc9f0;
+            --danger-color: #f72585;
+            --warning-color: #f8961e;
+            --info-color: #4895ef;
+            --light-color: #f8f9fa;
+            --dark-color: #212529;
+            --gray-color: #6c757d;
+            --border-radius: 8px;
+            --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+        }
 
-            --border-radius: 0.5rem;
-            --box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f8f9fa;
-            color: var(--dark-color);
             line-height: 1.6;
+            color: var(--dark-color);
+            background-color: #f0f2f5;
+            padding: 0;
+            margin: 0;
         }
 
         .container {
-            max-width: 960px;
-            margin: auto;
-            padding: 1.5rem;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
         }
 
         header {
             background-color: var(--primary-color);
             color: white;
             padding: 1rem 0;
+            text-align: center;
             margin-bottom: 2rem;
-            border-radius: var(--border-radius);
             box-shadow: var(--box-shadow);
         }
 
-        header .container {
-            text-align: center;
-        }
-
-        h1 {
+        header h1 {
             margin: 0;
-            font-size: 2.2rem;
+            font-size: 2.5rem;
         }
 
         .card {
@@ -688,70 +608,123 @@ if (isset($_GET['serve'])) {
             border-radius: var(--border-radius);
             box-shadow: var(--box-shadow);
             margin-bottom: 1.5rem;
-            border: none;
+            overflow: hidden;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
         }
 
         .card-header {
-            background-color: #e9ecef;
-            color: var(--gray-color);
-            padding: 0.75rem 1.25rem;
+            padding: 1rem;
+            background-color: #f8f9fa;
             border-bottom: 1px solid #dee2e6;
-            font-weight: 500;
-            border-top-left-radius: var(--border-radius);
-            border-top-right-radius: var(--border-radius);
+            font-weight: bold;
         }
 
         .card-body {
-            padding: 1.25rem;
+            padding: 1.5rem;
         }
 
         .form-group {
-            margin-bottom: 1.25rem;
+            margin-bottom: 1rem;
         }
 
         label {
-            font-weight: 500;
             display: block;
             margin-bottom: 0.5rem;
+            font-weight: 500;
         }
 
-        input[type="text"] {
+        input[type="text"], select {
             width: 100%;
             padding: 0.75rem;
             border: 1px solid #ced4da;
             border-radius: var(--border-radius);
             font-size: 1rem;
-            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
         }
 
-        input[type="text"]:focus {
+        input[type="text"]:focus, select:focus {
+            outline: none;
             border-color: var(--primary-color);
-            outline: 0;
             box-shadow: 0 0 0 0.2rem rgba(67, 97, 238, 0.25);
         }
 
-        .alert {
+        .btn {
+            display: inline-block;
+            font-weight: 500;
+            text-align: center;
+            white-space: nowrap;
+            vertical-align: middle;
+            user-select: none;
+            border: 1px solid transparent;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            line-height: 1.5;
             border-radius: var(--border-radius);
-            margin-bottom: 1.5rem;
-            padding: 1rem 1.25rem;
+            transition: var(--transition);
+            cursor: pointer;
         }
 
-        .alert-info {
-            background-color: #d1ecf1;
-            border-color: #bee5eb;
-            color: #0c5460;
+        .btn-primary {
+            color: #fff;
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--secondary-color);
+            border-color: var(--secondary-color);
+        }
+
+        .btn-success {
+            color: #fff;
+            background-color: var(--success-color);
+            border-color: var(--success-color);
+        }
+
+        .btn-success:hover {
+            background-color: #3aa0c1;
+            border-color: #3aa0c1;
+        }
+
+        .btn-block {
+            display: block;
+            width: 100%;
+        }
+
+        .alert {
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border: 1px solid transparent;
+            border-radius: var(--border-radius);
         }
 
         .alert-danger {
+            color: #721c24;
             background-color: #f8d7da;
             border-color: #f5c6cb;
-            color: #721c24;
+        }
+
+        .alert-warning {
+            color: #856404;
+            background-color: #fff3cd;
+            border-color: #ffeeba;
         }
 
         .alert-success {
+            color: #155724;
             background-color: #d4edda;
             border-color: #c3e6cb;
-            color: #155724;
+        }
+
+        .alert-info {
+            color: #0c5460;
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
         }
 
         .hidden {
@@ -760,36 +733,36 @@ if (isset($_GET['serve'])) {
 
         .video-info {
             display: flex;
-            align-items: center;
+            flex-wrap: wrap;
             margin-bottom: 1.5rem;
         }
 
         .video-thumbnail {
+            flex: 0 0 200px;
             margin-right: 1.5rem;
-            flex: 0 0 auto;
+            margin-bottom: 1rem;
         }
 
         .video-thumbnail img {
-            max-width: 320px;
+            max-width: 100%;
             height: auto;
             border-radius: var(--border-radius);
-            box-shadow: var(--box-shadow);
         }
 
         .video-details {
-            flex: 1 1 auto;
+            flex: 1;
+            min-width: 300px;
         }
 
         .video-title {
             font-size: 1.5rem;
-            font-weight: 500;
             margin-bottom: 0.5rem;
+            font-weight: bold;
         }
 
         .video-meta {
+            margin-bottom: 1rem;
             color: var(--gray-color);
-            font-size: 0.9rem;
-            margin-bottom: 0.5rem;
         }
 
         .video-meta span {
@@ -803,9 +776,8 @@ if (isset($_GET['serve'])) {
         .format-list {
             list-style: none;
             padding: 0;
-            margin: 0;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
             gap: 1rem;
         }
 
@@ -1079,94 +1051,6 @@ if (isset($_GET['serve'])) {
             margin-left: 8px;
             vertical-align: middle;
         }
-        
-        /* Debug toggle button */
-        .debug-toggle {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            box-shadow: var(--box-shadow);
-            z-index: 999;
-        }
-        
-        /* Test buttons */
-        .test-buttons {
-            margin-top: 20px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        
-        .test-button {
-            background-color: var(--info-color);
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: var(--border-radius);
-            cursor: pointer;
-            font-size: 0.9rem;
-            transition: background-color 0.3s;
-        }
-        
-        .test-button:hover {
-            background-color: #3a7bc8;
-        }
-        
-        /* Platform badges */
-        .platform-badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 0.8rem;
-            margin-left: 8px;
-            vertical-align: middle;
-            color: white;
-        }
-        
-        .youtube-badge {
-            background-color: #FF0000;
-        }
-        
-        .tiktok-badge {
-            background-color: #000000;
-        }
-        
-        .instagram-badge {
-            background-color: #C13584;
-        }
-        
-        .facebook-badge {
-            background-color: #3b5998;
-        }
-        
-        /* Admin actions */
-        .admin-actions {
-            margin-top: 20px;
-            padding: 15px;
-            background-color: #f8f9fa;
-            border-radius: var(--border-radius);
-            border: 1px solid #dee2e6;
-        }
-        
-        .admin-actions h4 {
-            margin-top: 0;
-            margin-bottom: 10px;
-        }
-        
-        .admin-actions .btn {
-            margin-right: 10px;
-            margin-bottom: 10px;
-        }
     </style>
 </head>
 <body>
@@ -1195,7 +1079,6 @@ if (isset($_GET['serve'])) {
             <div class="alert alert-info">
                 <p><strong>yt-dlp version:</strong> <?php echo $dependencies['ytdlp']['version']; ?></p>
                 <p><strong>FFmpeg:</strong> Installed</p>
-                <p><strong>Paths:</strong> yt-dlp: <?php echo $dependencies['ytdlp']['path']; ?>, ffmpeg: <?php echo $dependencies['ffmpeg']['path']; ?></p>
             </div>
         <?php endif; ?>
 
@@ -1210,15 +1093,6 @@ if (isset($_GET['serve'])) {
                         <input type="text" id="video-url" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off">
                         <div id="url-input-spinner" class="url-input-spinner hidden"></div>
                     </div>
-                </div>
-                
-                <!-- Test buttons for quick testing -->
-                <div class="test-buttons">
-                    <button class="test-button" onclick="testUrl('https://www.youtube.com/shorts/9NHpoCMMIko')">Test YouTube Shorts</button>
-                    <button class="test-button" onclick="testUrl('https://vt.tiktok.com/ZShsdTSVr/')">Test TikTok</button>
-                    <button class="test-button" onclick="testUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')">Test YouTube</button>
-                    <button class="test-button" onclick="runDiagnostics()">Run Diagnostics</button>
-                    <button class="test-button" onclick="updateYtDlp()">Update yt-dlp</button>
                 </div>
             </div>
         </div>
@@ -1270,10 +1144,6 @@ if (isset($_GET['serve'])) {
         <h4>Debug Information</h4>
         <pre id="debug-content"></pre>
     </div>
-    
-    <button class="debug-toggle" onclick="window.toggleDebugMode()">
-        <i class="fas fa-bug"></i>
-    </button>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -1307,15 +1177,10 @@ if (isset($_GET['serve'])) {
             }
             
             // Event listeners
-            videoUrlInput.addEventListener('keyup', function(e) {
+            videoUrlInput.addEventListener('keyup', function() {
                 clearTimeout(typingTimer);
                 if (videoUrlInput.value) {
-                    // If Enter key is pressed, immediately process
-                    if (e.key === 'Enter') {
-                        doneTyping();
-                    } else {
-                        typingTimer = setTimeout(doneTyping, doneTypingInterval);
-                    }
+                    typingTimer = setTimeout(doneTyping, doneTypingInterval);
                 }
             });
             
@@ -1340,9 +1205,6 @@ if (isset($_GET['serve'])) {
                 setTimeout(() => {
                     errorContainer.classList.add('hidden');
                 }, 5000);
-                
-                // Log to debug panel
-                window.logDebug('ERROR: ' + message);
             }
             
             function showSuccess(message) {
@@ -1353,9 +1215,6 @@ if (isset($_GET['serve'])) {
                 setTimeout(() => {
                     successContainer.classList.add('hidden');
                 }, 5000);
-                
-                // Log to debug panel
-                window.logDebug('SUCCESS: ' + message);
             }
             
             function hideError() {
@@ -1366,31 +1225,9 @@ if (isset($_GET['serve'])) {
                 hideError();
                 videoInfoContainer.classList.add('hidden');
                 
-                // Show spinner in URL input
-                urlInputSpinner.classList.remove('hidden');
-                
                 // Show full-screen loading overlay for fetching video info
-                const isYoutube = url.includes('youtube.com') || url.includes('youtu.be');
-                const isTiktok = url.includes('tiktok.com');
-                const isInstagram = url.includes('instagram.com');
-                const isFacebook = url.includes('facebook.com') || url.includes('fb.watch');
-                
-                if (isYoutube) {
-                    updateLoadingText('Fetching YouTube video information...', 'YouTube videos may take longer to process. Please be patient.');
-                } else if (isTiktok) {
-                    updateLoadingText('Fetching TikTok video information...', 'Please wait while we analyze the video.');
-                } else if (isInstagram) {
-                    updateLoadingText('Fetching Instagram content...', 'Instagram content may take longer to process. Please be patient.');
-                } else if (isFacebook) {
-                    updateLoadingText('Fetching Facebook content...', 'Facebook content may take longer to process. Please be patient.');
-                } else {
-                    updateLoadingText('Fetching video information...', 'Please wait while we analyze the video.');
-                }
-                
+                updateLoadingText('Fetching video information...', 'Please wait while we analyze the video.');
                 loadingOverlay.classList.remove('hidden');
-                
-                // Log to debug panel
-                window.logDebug('Fetching info for URL: ' + url);
                 
                 fetch('?action=get_info', {
                     method: 'POST',
@@ -1399,60 +1236,29 @@ if (isset($_GET['serve'])) {
                     },
                     body: `url=${encodeURIComponent(url)}`
                 })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! Status: ${response.status}`);
-                    }
-                    return response.json();
-                })
+                .then(response => response.json())
                 .then(data => {
-                    // Hide loading overlay and spinner
+                    // Hide loading overlay
                     loadingOverlay.classList.add('hidden');
-                    urlInputSpinner.classList.add('hidden');
                     
                     if (!data.success) {
                         showError(data.message || 'Failed to get video information');
                         return;
                     }
                     
-                    // Log success to debug panel
-                    window.logDebug('Successfully retrieved video info: ' + data.info.title);
-                    
                     videoInfo = data;
                     displayVideoInfo(data);
                 })
                 .catch(error => {
-                    // Hide loading overlay and spinner
+                    // Hide loading overlay
                     loadingOverlay.classList.add('hidden');
-                    urlInputSpinner.classList.add('hidden');
-                    
                     showError('Error: ' + error.message);
-                    window.logDebug('Error fetching video info: ' + error.message);
                 });
             }
             
             function displayVideoInfo(data) {
                 const info = data.info;
                 const isShorts = info.is_shorts || false;
-                const isYoutube = info.is_youtube || false;
-                const isTiktok = info.is_tiktok || false;
-                const isInstagram = info.is_instagram || false;
-                const isFacebook = info.is_facebook || false;
-                
-                // Create platform badge
-                let platformBadge = '';
-                if (isYoutube) {
-                    platformBadge = '<span class="platform-badge youtube-badge">YouTube</span>';
-                    if (isShorts) {
-                        platformBadge = '<span class="platform-badge youtube-badge">YouTube Shorts</span>';
-                    }
-                } else if (isTiktok) {
-                    platformBadge = '<span class="platform-badge tiktok-badge">TikTok</span>';
-                } else if (isInstagram) {
-                    platformBadge = '<span class="platform-badge instagram-badge">Instagram</span>';
-                } else if (isFacebook) {
-                    platformBadge = '<span class="platform-badge facebook-badge">Facebook</span>';
-                }
                 
                 // Display video info
                 videoInfoElement.innerHTML = `
@@ -1462,7 +1268,7 @@ if (isset($_GET['serve'])) {
                     <div class="video-details">
                         <div class="video-title">
                             ${info.title}
-                            ${platformBadge}
+                            ${isShorts ? '<span class="shorts-badge">Shorts</span>' : ''}
                         </div>
                         <div class="video-meta">
                             <span><i class="fas fa-user"></i> ${info.uploader}</span>
@@ -1472,10 +1278,7 @@ if (isset($_GET['serve'])) {
                             <span><i class="fas fa-eye"></i> ${formatNumber(info.view_count)} views</span>
                             <span><i class="fas fa-thumbs-up"></i> ${formatNumber(info.like_count)} likes</span>
                         </div>
-                        ${isYoutube ? '<div class="alert alert-info" style="margin-top: 10px;"><i class="fas fa-info-circle"></i> YouTube videos may take longer to download due to anti-scraping measures.</div>' : ''}
-                        ${isTiktok ? '<div class="alert alert-info" style="margin-top: 10px;"><i class="fas fa-info-circle"></i> TikTok videos may require multiple attempts to download.</div>' : ''}
-                        ${isInstagram ? '<div class="alert alert-info" style="margin-top: 10px;"><i class="fas fa-info-circle"></i> Instagram content may require login cookies for some private content.</div>' : ''}
-                        ${isFacebook ? '<div class="alert alert-info" style="margin-top: 10px;"><i class="fas fa-info-circle"></i> Facebook content may require login cookies for some private content.</div>' : ''}
+                        ${isShorts ? '<div class="alert alert-info" style="margin-top: 10px;"><i class="fas fa-info-circle"></i> YouTube Shorts may take longer to download.</div>' : ''}
                     </div>
                 `;
                 
@@ -1532,23 +1335,7 @@ if (isset($_GET['serve'])) {
                 const downloadId = Date.now();
                 
                 // Show loading overlay with download message
-                const isYoutube = url.includes('youtube.com') || url.includes('youtu.be');
-                const isTiktok = url.includes('tiktok.com');
-                const isInstagram = url.includes('instagram.com');
-                const isFacebook = url.includes('facebook.com') || url.includes('fb.watch');
-                
-                if (isYoutube) {
-                    updateLoadingText('Preparing YouTube download...', 'YouTube videos may take longer to process. Please be patient.');
-                } else if (isTiktok) {
-                    updateLoadingText('Preparing TikTok download...', 'Please wait while we process your download.');
-                } else if (isInstagram) {
-                    updateLoadingText('Preparing Instagram download...', 'Instagram content may take longer to process. Please be patient.');
-                } else if (isFacebook) {
-                    updateLoadingText('Preparing Facebook download...', 'Facebook content may take longer to process. Please be patient.');
-                } else {
-                    updateLoadingText('Preparing your download...', 'This may take a moment. Please don\'t close this page.');
-                }
-                
+                updateLoadingText('Preparing your download...', 'This may take a moment. Please don\'t close this page.');
                 loadingOverlay.classList.remove('hidden');
                 
                 // Reset progress bar animation
@@ -1558,17 +1345,15 @@ if (isset($_GET['serve'])) {
                     progressBar.style.animation = 'progress 120s linear forwards';
                 }, 10);
                 
-                // Log to debug panel
-                window.logDebug('Starting download: URL=' + url + ', Format=' + format);
+                // Check if this is a YouTube Shorts URL
+                const isYoutubeShorts = url.includes('youtube.com/shorts') || (url.includes('youtu.be/') && url.length < 30);
+                if (isYoutubeShorts) {
+                    updateLoadingText('Preparing YouTube Shorts download...', 'Shorts may take longer to process. Please be patient.');
+                }
                 
                 // Make the AJAX request to download the video
                 fetch(`?download=1&url=${encodeURIComponent(url)}&format=${format}`)
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! Status: ${response.status}`);
-                        }
-                        return response.json();
-                    })
+                    .then(response => response.json())
                     .then(data => {
                         if (data.success) {
                             // Download was successful, now serve the file
@@ -1582,21 +1367,16 @@ if (isset($_GET['serve'])) {
                             downloadLink.click();
                             document.body.removeChild(downloadLink);
                             
-                            // Log success to debug panel
-                            window.logDebug('Download successful: ' + data.file.name + ' (' + formatFileSize(data.file.size) + ')');
-                            
                             // Complete the download process
                             completeDownload(downloadId, formatElement);
                         } else {
                             // Download failed
                             showError(data.message || 'Download failed');
-                            window.logDebug('Download failed: ' + (data.message || 'Unknown error'));
                             completeDownload(downloadId, formatElement);
                         }
                     })
                     .catch(error => {
                         showError('Error: ' + error.message);
-                        window.logDebug('Download error: ' + error.message);
                         completeDownload(downloadId, formatElement);
                     });
                 
@@ -1604,10 +1384,9 @@ if (isset($_GET['serve'])) {
                 downloadTimeouts[downloadId] = setTimeout(() => {
                     if (activeDownloads > 0) {
                         showError('Download process timed out. Please try again or try a different format.');
-                        window.logDebug('Download timeout for ID: ' + downloadId);
                         completeDownload(downloadId, formatElement);
                     }
-                }, 300000); // 5 minutes timeout
+                }, 180000); // 3 minutes timeout
             }
             
             function completeDownload(downloadId, formatElement) {
@@ -1627,17 +1406,29 @@ if (isset($_GET['serve'])) {
                 }
             }
             
+            function showNotification(message) {
+                // Create notification element if it doesn't exist
+                let notification = document.getElementById('notification');
+                if (!notification) {
+                    notification = document.createElement('div');
+                    notification.id = 'notification';
+                    notification.className = 'notification';
+                    document.body.appendChild(notification);
+                }
+                
+                // Set message and show
+                notification.textContent = message;
+                notification.classList.add('show');
+                
+                // Hide after 5 seconds
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                }, 5000);
+            }
+            
             function formatNumber(num) {
                 if (num === 'Unknown' || !num) return 'Unknown';
                 return new Intl.NumberFormat().format(num);
-            }
-            
-            function formatFileSize(bytes) {
-                if (bytes === 0) return '0 Bytes';
-                const k = 1024;
-                const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-                const i = Math.floor(Math.log(bytes) / Math.log(k));
-                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
             }
             
             // Check if URL is already in the input field on page load
@@ -1659,107 +1450,6 @@ if (isset($_GET['serve'])) {
                 debugContent.scrollTop = debugContent.scrollHeight;
             };
             
-            // Test URL function
-            window.testUrl = function(url) {
-                videoUrlInput.value = url;
-                currentUrl = url;
-                getVideoInfo(url);
-            };
-            
-            // Run diagnostics function
-            window.runDiagnostics = function() {
-                window.logDebug('Running diagnostics...');
-                
-                // Show debug panel
-                document.getElementById('debug-panel').classList.remove('hidden');
-                
-                // Log browser info
-                window.logDebug('Browser: ' + navigator.userAgent);
-                
-                // Check dependencies
-                fetch('?action=check_dependencies')
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! Status: ${response.status}`);
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        window.logDebug('yt-dlp: ' + (data.ytdlp.installed ? 'Installed (' + data.ytdlp.version + ')' : 'Not installed'));
-                        window.logDebug('ffmpeg: ' + (data.ffmpeg.installed ? 'Installed' : 'Not installed'));
-                        
-                        if (!data.ytdlp.installed || !data.ffmpeg.installed) {
-                            window.logDebug('ERROR: Missing dependencies. Please install yt-dlp and ffmpeg.');
-                            showError('Missing dependencies. Please install yt-dlp and ffmpeg.');
-                        } else {
-                            window.logDebug('All dependencies are installed.');
-                            showSuccess('All dependencies are installed.');
-                            
-                            // Test directory permissions
-                            window.logDebug('Testing directory permissions...');
-                            
-                            fetch('?action=test_permissions')
-                                .then(response => {
-                                    if (!response.ok) {
-                                        throw new Error(`HTTP error! Status: ${response.status}`);
-                                    }
-                                    return response.json();
-                                })
-                                .then(data => {
-                                    if (data.success) {
-                                        window.logDebug('Directory permissions: OK');
-                                        showSuccess('Directory permissions are correct.');
-                                    } else {
-                                        window.logDebug('ERROR: Directory permissions issue: ' + data.message);
-                                        showError('Directory permissions issue: ' + data.message);
-                                    }
-                                })
-                                .catch(error => {
-                                    window.logDebug('ERROR: Failed to test directory permissions: ' + error.message);
-                                });
-                        }
-                    })
-                    .catch(error => {
-                        window.logDebug('ERROR: Failed to check dependencies: ' + error.message);
-                    });
-            };
-            
-            // Update yt-dlp function
-            window.updateYtDlp = function() {
-                window.logDebug('Updating yt-dlp...');
-                
-                // Show debug panel
-                document.getElementById('debug-panel').classList.remove('hidden');
-                
-                // Show loading overlay
-                updateLoadingText('Updating yt-dlp...', 'This may take a moment. Please wait.');
-                loadingOverlay.classList.remove('hidden');
-                
-                fetch('?action=update_ytdlp')
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! Status: ${response.status}`);
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        loadingOverlay.classList.add('hidden');
-                        
-                        if (data.success) {
-                            window.logDebug('yt-dlp update successful: ' + data.message);
-                            showSuccess('yt-dlp updated successfully. Please refresh the page.');
-                        } else {
-                            window.logDebug('ERROR: yt-dlp update failed: ' + data.message);
-                            showError('Failed to update yt-dlp: ' + data.message);
-                        }
-                    })
-                    .catch(error => {
-                        loadingOverlay.classList.add('hidden');
-                        window.logDebug('ERROR: Failed to update yt-dlp: ' + error.message);
-                        showError('Failed to update yt-dlp: ' + error.message);
-                    });
-            };
-            
             // Press Ctrl+Shift+D to toggle debug mode
             document.addEventListener('keydown', function(e) {
                 if (e.ctrlKey && e.shiftKey && e.key === 'D') {
@@ -1767,10 +1457,6 @@ if (isset($_GET['serve'])) {
                     e.preventDefault();
                 }
             });
-            
-            // Log initial debug info
-            window.logDebug('Video Downloader initialized');
-            window.logDebug('User Agent: ' + navigator.userAgent);
         });
     </script>
 </body>
