@@ -3,6 +3,8 @@
 // Include platform-specific functions
 require_once('platform-specific.php');
 
+require_once('fix-download.php');
+
 // Create cache directory with proper permissions
 $cache_dir = '/tmp/yt-dlp-cache/';
 if (!file_exists($cache_dir)) {
@@ -72,10 +74,11 @@ $config = [
 ini_set('max_execution_time', $config['max_execution_time']);
 
 // Create necessary directories
-foreach ([$config['temp_dir'], $config['log_dir']] as $dir) {
+foreach ([$config['temp_dir'], '/tmp/yt-dlp-cache'] as $dir) {
     if (!file_exists($dir)) {
-        mkdir($dir, 0755, true);
+        mkdir($dir, 0777, true);
     }
+    chmod($dir, 0777);
 }
 
 // Debug log function
@@ -520,7 +523,8 @@ if (isset($_GET['download']) && isset($_GET['url']) && isset($_GET['format'])) {
     }
     
     // Download the video
-    download_video($url, $format, $config);
+    // download_video($url, $format, $config);
+    fix_download_process($url, $format, $config);
     exit;
 }
 
