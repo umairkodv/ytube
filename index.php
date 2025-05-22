@@ -1,5 +1,7 @@
 <?php
-
+// Include error handler first
+require_once('error-handler.php');
+require_once('directory-helper.php');
 // Include platform-specific functions
 require_once('platform-specific.php');
 
@@ -76,11 +78,8 @@ $config = [
 ini_set('max_execution_time', $config['max_execution_time']);
 
 // Create necessary directories
-foreach ([$config['temp_dir'], '/tmp/yt-dlp-cache'] as $dir) {
-    if (!file_exists($dir)) {
-        mkdir($dir, 0777, true);
-    }
-    chmod($dir, 0777);
+foreach ([$config['temp_dir'], $config['log_dir'], '/tmp/yt-dlp-cache'] as $dir) {
+    ensure_writable_dir($dir);
 }
 
 // Debug log function
