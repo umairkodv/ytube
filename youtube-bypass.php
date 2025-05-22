@@ -11,7 +11,7 @@ function bypass_youtube_rate_limit($url, $format_key, $config) {
     
     if (!$video_info['success']) {
         debug_log("Failed to get YouTube video info for download", $config);
-        header('HTTP/1.0 400 Bad Request');
+        header('Content-Type: application/json');
         echo json_encode([
             'success' => false,
             'message' => 'Failed to get YouTube video information'
@@ -93,98 +93,21 @@ function bypass_youtube_rate_limit($url, $format_key, $config) {
                     curl_setopt($ch, CURLOPT_TIMEOUT, 300);
                     curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
                     curl_exec($ch);
+                    $curl_error = curl_error($ch);
                     curl_close($ch);
                     fclose($fp);
                     
-                    if (file_exists($temp_file) && filesize($temp_file) > 1000) {
+                    if (empty($curl_error) && file_exists($temp_file) && filesize($temp_file) > 1000) {
                         debug_log("Approach 3 successful", $config);
                         $success = true;
                     } else {
-                        debug_log("Approach 3 failed: curl download failed", $config);
+                        debug_log("Approach 3 failed: $curl_error", $config);
                     }
                 } else {
                     debug_log("Curl not available", $config);
                 }
             } else {
                 debug_log("Approach 3 failed: Could not get direct URL", $config);
-            }
-            
-            // Approach 4: Try using a public API proxy
-            if (!$success) {
-                debug_log("Trying approach 4: Public API proxy", $config);
-                
-                // Use invidious API to get video info
-                $invidious_instances = [
-                    'https://invidious.snopyta.org',
-                    'https://yewtu.be',
-                    'https://invidious.kavin.rocks',
-                    'https://vid.puffyan.us'
-                ];
-                
-                foreach ($invidious_instances as $instance) {
-                    $api_url = "$instance/api/v1/videos/$video_id";
-                    debug_log("Trying Invidious instance: $api_url", $config);
-                    
-                    $context = stream_context_create([
-                        'http' => [
-                            'method' => 'GET',
-                            'header' => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36\r\n"
-                        ]
-                    ]);
-                    
-                    $response = @file_get_contents($api_url, false, $context);
-                    
-                    if ($response) {
-                        $data = json_decode($response, true);
-                        
-                        if ($data && isset($data['adaptiveFormats'])) {
-                            debug_log("Got video data from Invidious", $config);
-                            
-                            // Find the best format
-                            $best_format = null;
-                            $best_quality = 0;
-                            
-                            foreach ($data['adaptiveFormats'] as $format_data) {
-                                if (isset($format_data['url']) && isset($format_data['quality'])) {
-                                    if ($format_data['quality'] > $best_quality) {
-                                        $best_format = $format_data;
-                                        $best_quality = $format_data['quality'];
-                                    }
-                                }
-                            }
-                            
-                            if ($best_format && isset($best_format['url'])) {
-                                $direct_url = $best_format['url'];
-                                debug_log("Got direct URL from Invidious: $direct_url", $config);
-                                
-                                // Download using curl
-                                if (function_exists('curl_init')) {
-                                    debug_log("Downloading with curl", $config);
-                                    $ch = curl_init($direct_url);
-                                    $fp = fopen($temp_file, 'wb');
-                                    curl_setopt($ch, CURLOPT_FILE, $fp);
-                                    curl_setopt($ch, CURLOPT_HEADER, 0);
-                                    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-                                    curl_setopt($ch, CURLOPT_TIMEOUT, 300);
-                                    curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
-                                    curl_exec($ch);
-                                    curl_close($ch);
-                                    fclose($fp);
-                                    
-                                    if (file_exists($temp_file) && filesize($temp_file) > 1000) {
-                                        debug_log("Approach 4 successful", $config);
-                                        $success = true;
-                                        break;
-                                    } else {
-                                        debug_log("Approach 4 failed: curl download failed", $config);
-                                    }
-                                } else {
-                                    debug_log("Curl not available", $config);
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
     }
