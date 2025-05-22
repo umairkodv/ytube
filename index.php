@@ -1,13 +1,30 @@
 <?php
+
 // Include error handler first
 require_once('error-handler.php');
+
+// Include directory helper
 require_once('directory-helper.php');
+
 // Include platform-specific functions
 require_once('platform-specific.php');
 
-require_once('youtube-bypass.php');
+// Include YouTube bypass functions
+require_once('youtube-direct-bypass.php');
+
+// Include proxy configuration
 require_once('proxy-config.php');
+
+// Include the updated download fix
 require_once('fix-download-updated.php');
+
+// Set cache directory for yt-dlp
+$cache_dir = '/tmp/yt-dlp-cache/';
+if (!file_exists($cache_dir)) {
+    safe_mkdir($cache_dir);
+}
+putenv("XDG_CACHE_HOME={$cache_dir}");
+
 
 // Create cache directory with proper permissions
 $cache_dir = '/tmp/yt-dlp-cache/';
