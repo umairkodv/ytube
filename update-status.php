@@ -34,3 +34,4 @@ if ($update_return === 0) {
     echo "Update failed.\n";
     echo implode("\n", $update_output) . "\n";
 }
+
