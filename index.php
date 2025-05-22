@@ -1418,7 +1418,7 @@ $dependencies = check_dependencies($config);
                         }
                     })
                     .catch(error => {
-                        showError('Error: ' + error.message);
+                        showError('Error: ' + (error.details || error.message || 'Unknown error'));
                         completeDownload(downloadId, formatElement);
                     });
                 
