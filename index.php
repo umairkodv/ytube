@@ -1,4 +1,14 @@
 <?php
+
+// Include platform-specific functions
+require_once('platform-specific.php');
+
+// Create cache directory with proper permissions
+$cache_dir = '/tmp/yt-dlp-cache/';
+if (!file_exists($cache_dir)) {
+    mkdir($cache_dir, 0777, true);
+}
+putenv("XDG_CACHE_HOME={$cache_dir}");
 // Error reporting for debugging (remove in production)
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -183,6 +193,20 @@ function check_rate_limit($config) {
 
 // Function to get video info
 function get_video_info($url, $config) {
+    // Determine which platform the URL is from
+    $is_youtube = (strpos($url, 'youtube.com') !== false || strpos($url, 'youtu.be') !== false);
+    $is_facebook = (strpos($url, 'facebook.com') !== false || strpos($url, 'fb.watch') !== false);
+    $is_instagram = (strpos($url, 'instagram.com') !== false);
+    
+    // Use platform-specific handlers
+    if ($is_youtube) {
+        return get_youtube_video_info($url, $config);
+    } else if ($is_facebook) {
+        return get_facebook_video_info($url, $config);
+    } else if ($is_instagram) {
+        return get_instagram_video_info($url, $config);
+    }
+    
     debug_log("Getting video info for URL: $url", $config);
     $ytdlp_path = $config['ytdlp_path'];
     $url = escapeshellarg($url);
@@ -254,6 +278,20 @@ function get_video_info($url, $config) {
 // Function to download video directly (no iframe)
 function download_video($url, $format_key, $config) {
     debug_log("Starting direct download for URL: $url, Format: $format_key", $config);
+
+    // Determine which platform the URL is from
+    $is_youtube = (strpos($url, 'youtube.com') !== false || strpos($url, 'youtu.be') !== false);
+    $is_facebook = (strpos($url, 'facebook.com') !== false || strpos($url, 'fb.watch') !== false);
+    $is_instagram = (strpos($url, 'instagram.com') !== false);
+    
+    // Use platform-specific handlers
+    if ($is_youtube) {
+        return download_youtube_video($url, $format_key, $config);
+    } else if ($is_facebook) {
+        return download_facebook_video($url, $format_key, $config);
+    } else if ($is_instagram) {
+        return download_instagram_video($url, $format_key, $config);
+    }
     
     // Get video info to get the title
     $video_info = get_video_info($url, $config);
